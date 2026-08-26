@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+.DS_Store
+.ipynb_checkpoints/
+
+# generated outputs
+artifacts/
+data/raw/
+*.npz
+!nabla/data/*.npz
+
+# web
+web/node_modules/
+web/dist/
+web/.vite/
