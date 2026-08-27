@@ -42,7 +42,6 @@ from benchmarks.common import (  # noqa: E402
     table,
 )
 from nabla import Value, graph_size  # noqa: E402
-from nabla.core.tensor import Tensor  # noqa: E402
 from nabla.data import DataLoader  # noqa: E402
 from nabla.data.mnist import load_mnist  # noqa: E402
 from nabla.losses import softmax_cross_entropy  # noqa: E402

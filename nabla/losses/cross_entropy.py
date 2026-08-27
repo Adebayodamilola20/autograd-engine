@@ -142,7 +142,6 @@ yourself first. Now you know what it is protecting you from.
 
 from __future__ import annotations
 
-import math
 from typing import Sequence
 
 from ..core.value import Value

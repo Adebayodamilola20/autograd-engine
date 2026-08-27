@@ -477,7 +477,9 @@ class TestInitializers:
         assert max(samples) == pytest.approx(limit, rel=0.02)
 
     def test_auto_picks_by_activation(self):
-        from nabla.nn import for_activation, he_normal as he, xavier_uniform as xu
+        from nabla.nn import for_activation
+        from nabla.nn import he_normal as he
+        from nabla.nn import xavier_uniform as xu
 
         assert for_activation("relu") is he
         assert for_activation("tanh") is xu

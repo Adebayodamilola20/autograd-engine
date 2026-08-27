@@ -205,13 +205,13 @@ This turned out to be the most interesting result in the project.
 
 | engine | forward + backward, per sample | vs the next |
 |---|---|---|
-| our scalar `Value` engine | 2.09 s | — |
-| our tensor engine | 7.3 µs | **~285,000× faster** |
-| PyTorch | 4.5 µs | 1.6× faster |
+| our scalar `Value` engine | 1.68 s | — |
+| our tensor engine | 6.6 µs | **~254,000× faster** |
+| PyTorch | 4.7 µs | 1.4× faster |
 
 Read that twice. The step from **our scalar engine to our tensor engine** is
-~285,000×. The step from our tensor engine to **PyTorch** — thousands of
-contributors, hand-tuned kernels, a C++ core — is about 1.6×.
+~254,000×. The step from our tensor engine to **PyTorch** — thousands of
+contributors, hand-tuned kernels, a C++ core — is about 1.4×.
 
 The cause is granularity. One MNIST sample on the scalar engine builds a graph
 of **328,804 nodes**. The tensor engine computes the same gradients for a batch
@@ -230,11 +230,15 @@ flattering to us.
 
 | operation | nabla | PyTorch | PyTorch faster by |
 |---|---|---|---|
-| forward (batch of 64) | 128 µs | 90 µs | 1.6× |
-| forward + backward | 469 µs | 291 µs | 1.9× |
-| full training step | 837 µs | 605 µs | 1.6× |
-| **one MNIST epoch** | 218 ms | 178 ms | **1.2×** |
-| inference over test set | 11 ms | 2.6 ms | 4.4× |
+| forward (batch of 64) | 118 µs | 91 µs | 1.3× |
+| forward + backward | 424 µs | 302 µs | 1.4× |
+| full training step | 882 µs | 609 µs | 1.4× |
+| **one MNIST epoch** | 161 ms | 89 ms | **1.8×** |
+| inference over test set | 4.6 ms | 2.1 ms | 2.2× |
+
+*Measured on one machine; `python benchmarks/compare.py` regenerates this table
+and [docs/18-performance.md](docs/18-performance.md) from scratch. Run-to-run
+variation is a few tenths on the ratios.*
 
 Accuracy after one epoch: **91.5% (ours) vs 89.8% (PyTorch)** — close enough to
 confirm both are solving the same problem, which is what makes the timings mean

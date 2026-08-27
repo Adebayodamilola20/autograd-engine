@@ -73,10 +73,63 @@ MIRRORS = [
 DEFAULT_ROOT = Path(__file__).resolve().parents[2] / "data" / "raw"
 
 
-def download_mnist(root: str | Path = DEFAULT_ROOT, *, quiet: bool = False) -> Path:
+def _fetch(url: str, target: Path, *, timeout: float, quiet: bool) -> None:
+    """Download one file to ``target``, atomically, with progress.
+
+    Two details that matter more than they look:
+
+    **Chunked, not ``response.read()``.** The socket timeout applies to each
+    individual read. Pulling an entire 9.9 MB body in one call means one slow
+    stretch anywhere in the transfer kills it. Reading in 64 KB chunks means
+    the timeout only fires if the server genuinely stalls, which is what a
+    timeout should mean. It also lets us show progress rather than appearing
+    hung for half an hour.
+
+    **Written to ``.part`` and renamed on success.** ``rename`` is atomic
+    within a filesystem, so the real filename never exists in a half-written
+    state. Without this, an interrupted download leaves a truncated file that
+    the "already cached?" check happily accepts on the next run. ``read_idx``
+    would catch the corruption eventually, but "your MNIST file is corrupt" is
+    a much worse error than simply downloading it again.
+    """
+    request = urllib.request.Request(url, headers={"User-Agent": "nabla-autograd/0.1"})
+    part = target.with_suffix(target.suffix + ".part")
+
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            total = int(response.headers.get("Content-Length", 0))
+            downloaded = 0
+            with open(part, "wb") as handle:
+                while chunk := response.read(65536):
+                    handle.write(chunk)
+                    downloaded += len(chunk)
+                    if not quiet and total:
+                        pct = downloaded / total * 100
+                        print(
+                            f"\r    {target.name}  {downloaded / 1e6:5.1f} /"
+                            f" {total / 1e6:.1f} MB  ({pct:5.1f}%)",
+                            end="",
+                            flush=True,
+                        )
+        if not quiet:
+            print()
+        part.replace(target)          # atomic: no partial file under the real name
+    finally:
+        part.unlink(missing_ok=True)  # never leave debris behind on failure
+
+
+def download_mnist(
+    root: str | Path = DEFAULT_ROOT,
+    *,
+    quiet: bool = False,
+    timeout: float = 60.0,
+    attempts: int = 2,
+) -> Path:
     """Download the four MNIST files if they are not already cached.
 
-    Returns the directory holding them. Tries each mirror in turn.
+    Returns the directory holding them. Each mirror is tried ``attempts``
+    times before moving on, because a transient failure on a slow connection
+    is common and is not a reason to give up on an otherwise good mirror.
     """
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
@@ -87,22 +140,29 @@ def download_mnist(root: str | Path = DEFAULT_ROOT, *, quiet: bool = False) -> P
             continue
 
         last_error: Exception | None = None
-        for mirror in MIRRORS:
-            try:
-                if not quiet:
-                    print(f"  downloading {filename} from {mirror.split('/')[2]} ...")
-                request = urllib.request.Request(
-                    mirror + filename, headers={"User-Agent": "nabla-autograd/0.1"}
-                )
-                with urllib.request.urlopen(request, timeout=120) as response:
-                    target.write_bytes(response.read())
-                break
-            except Exception as err:  # noqa: BLE001 - try the next mirror
-                last_error = err
+        for attempt in range(attempts):
+            for mirror in MIRRORS:
+                try:
+                    if not quiet:
+                        host = mirror.split("/")[2]
+                        retry = f"  (attempt {attempt + 1})" if attempt else ""
+                        print(f"  downloading {filename} from {host}{retry}")
+                    _fetch(mirror + filename, target, timeout=timeout, quiet=quiet)
+                    break
+                except Exception as err:  # noqa: BLE001 - try the next mirror
+                    last_error = err
+                    if not quiet:
+                        print(f"\r    failed: {type(err).__name__}: {err}")
+            else:
+                continue      # every mirror failed this round; try again
+            break             # a mirror succeeded
         else:
             raise RuntimeError(
-                f"could not download {filename} from any mirror. "
-                f"Last error: {last_error}. Place the file in {root} manually."
+                f"Could not download {filename} from any mirror after "
+                f"{attempts} attempts. Last error: {last_error}\n\n"
+                f"To continue without a working connection, download these "
+                f"four files by hand and place them in\n    {root}\n"
+                + "".join(f"      {MIRRORS[0]}{name}\n" for name in MNIST_FILES.values())
             )
     return root
 

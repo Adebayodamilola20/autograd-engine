@@ -6,8 +6,6 @@ construction, coercion, graph metadata, and the conveniences.
 
 from __future__ import annotations
 
-import math
-
 import pytest
 
 from nabla import Value

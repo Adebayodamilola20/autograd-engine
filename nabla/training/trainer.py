@@ -40,7 +40,7 @@ import numpy as np
 from ..core.value import Value
 from ..data.dataset import DataLoader
 from .checkpoint import save_checkpoint
-from .metrics import EpochMetrics, RunningAverage, Timer, accuracy, argmax
+from .metrics import EpochMetrics, RunningAverage, Timer, argmax
 
 __all__ = ["Trainer", "TrainingHistory"]
 

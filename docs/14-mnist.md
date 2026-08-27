@@ -144,7 +144,7 @@ The same training runs on the scalar `Value` engine:
 python examples/train_mnist.py --engine scalar
 ```
 
-It is **~285,000× slower per sample** and defaults to a small subset for that
+It is **~254,000× slower per sample** and defaults to a small subset for that
 reason. One sample builds a graph of **328,804 nodes with depth 1,000**.
 
 That is not a failure of the scalar engine — it computes identical gradients.

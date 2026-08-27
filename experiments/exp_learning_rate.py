@@ -110,7 +110,6 @@ def main() -> int:
     rule("What happened")
 
     best = max(aggs, key=lambda a: a.test_acc_mean)
-    diverged = [a for a in aggs if a.diverged]
     print(f"    Best: {best.label.strip()} at {best.acc_text()}\n")
 
     tiny = aggs[0]

@@ -29,3 +29,31 @@ markers = [
 [tool.ruff]
 line-length = 88
 target-version = "py310"
+
+[tool.ruff.lint]
+# Chosen explicitly rather than relying on defaults, so `ruff check` means the
+# same thing for everyone. Correctness rules (pyflakes) and real bug patterns
+# (bugbear) are enforced; purely stylistic opinions are not, because this
+# codebase deliberately keeps long mathematical docstrings and expository
+# formatting that generic style rules dislike.
+select = ["E4", "E7", "E9", "F", "I", "B"]
+ignore = [
+    "E741",  # "l" is a fine name for a layer index in a comprehension
+    "B008",  # calls in argument defaults -- not used dangerously here
+    # zip() without strict=. The hazard it targets -- silent truncation when
+    # sequences differ in length -- is real, and the places it could bite here
+    # already guard explicitly: Neuron.forward raises
+    # "expected 784 inputs, got 783" before it zips, which is a better error
+    # than strict=True produces. Everywhere else the two sequences are
+    # structurally the same object (layers with layers, weights with weights).
+    "B905",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Examples, benchmarks and experiments must insert the repo root on sys.path
+# before importing nabla, so their imports genuinely cannot come first.
+"examples/*" = ["E402"]
+"benchmarks/*" = ["E402"]
+"experiments/*" = ["E402"]
+"web/*" = ["E402"]
+"tests/*" = ["B011"]  # assert False is fine in tests

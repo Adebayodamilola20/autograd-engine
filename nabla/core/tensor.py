@@ -61,7 +61,7 @@ but because the graph must be small enough that Python is not the bottleneck.
 from __future__ import annotations
 
 from itertools import count
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 import numpy as np
 

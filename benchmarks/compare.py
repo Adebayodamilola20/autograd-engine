@@ -64,16 +64,6 @@ def run(script: str, extra: list[str]) -> None:
         raise SystemExit(f"{script} failed with exit code {result.returncode}")
 
 
-def ratio_text(ours: float, theirs: float, higher_is_better: bool) -> str:
-    """How many times faster PyTorch is. Always phrased in their favour."""
-    if ours <= 0 or theirs <= 0:
-        return "n/a"
-    factor = (theirs / ours) if higher_is_better else (ours / theirs)
-    if factor >= 1:
-        return f"{factor:,.1f}x"
-    return f"{1 / factor:,.1f}x ours"
-
-
 def main() -> int:
     args = parse_args()
     common = [
@@ -118,17 +108,19 @@ def main() -> int:
     # ══════════════════════════════════════════════════════════════════
     rule("Timings")
 
+    # Every one of these is a duration, so lower is better and the ratio is
+    # always ours/theirs. No per-row direction flag is needed.
     comparisons = [
-        ("tensor_forward_batch", "forward (batch)", False),
-        ("tensor_forward_backward_batch", "forward + backward", False),
-        ("tensor_training_step", "full training step", False),
-        ("mnist_epoch", "one MNIST epoch", False),
-        ("mnist_inference", "inference over test set", False),
+        ("tensor_forward_batch", "forward (batch)"),
+        ("tensor_forward_backward_batch", "forward + backward"),
+        ("tensor_training_step", "full training step"),
+        ("mnist_epoch", "one MNIST epoch"),
+        ("mnist_inference", "inference over test set"),
     ]
 
     rows = []
     ratios = {}
-    for key, label, higher in comparisons:
+    for key, label in comparisons:
         if key not in nabla["timings"] or key not in torch_["timings"]:
             continue
         ours = nabla["timings"][key]["best"]
@@ -226,13 +218,13 @@ def main() -> int:
     if not args.no_plot:
         try:
             _plot(nabla, torch_, ratios)
-            print(f"\n    artifacts/bench_comparison.png")
+            print("\n    artifacts/bench_comparison.png")
         except ImportError as err:
             print(f"\n    (plot skipped: {err})")
 
     _write_doc(nabla, torch_, ratios)
-    print(f"    docs/18-performance.md")
-    print(f"    artifacts/bench_comparison.json")
+    print("    docs/18-performance.md")
+    print("    artifacts/bench_comparison.json")
     print()
     return 0
 
@@ -346,6 +338,12 @@ def _write_doc(nabla: dict, torch_: dict, ratios: dict) -> None:
                 f"{ratios[key]:,.1f}x |"
             )
 
+    # --skip-scalar stores an explicit None here, and `.get(key, {})` returns
+    # that None rather than the default -- the default only applies when the
+    # key is *absent*. Normalise once instead of guarding at three call sites.
+    scalar_graph = nabla["notes"].get("scalar_graph_per_sample") or {}
+    scalar_nodes = scalar_graph.get("nodes", 0)
+
     scalar_note = ""
     if "scalar_forward_backward" in nabla["timings"]:
         s = nabla["timings"]["scalar_forward_backward"]["best_per_op"]
@@ -368,7 +366,7 @@ about **{v / p:,.1f}x**.
 Almost the entire performance story is **granularity**, and we captured most of
 it ourselves by changing what a node in the graph represents. Both engines
 compute identical gradients; one asks Python to manage
-{nabla["notes"].get("scalar_graph_per_sample", {}).get("nodes", 0):,} objects per
+{scalar_nodes:,} objects per
 sample and the other asks it to manage
 {nabla["notes"].get("tensor_graph", {}).get("nodes", 0)} per batch.
 """
@@ -414,7 +412,7 @@ shuffles differ.)
 
 Peak RSS: {nabla['peak_rss_mb']:,.0f} MiB (ours) vs
 {torch_['peak_rss_mb']:,.0f} MiB (PyTorch). Ours is inflated by the scalar-engine
-graph built earlier in the same process — {nabla["notes"].get("scalar_graph_per_sample", {}).get("nodes", 0):,}
+graph built earlier in the same process — {scalar_nodes:,}
 live Python objects is not free.
 {scalar_note}
 ## Why PyTorch is faster
@@ -475,7 +473,7 @@ tolerance.
 ## The lesson for this project
 
 The gap that dominates everything is **scalar vs tensor**, not **us vs PyTorch**.
-Representing a whole layer as one node instead of {nabla["notes"].get("scalar_graph_per_sample", {}).get("nodes", 0):,}
+Representing a whole layer as one node instead of {scalar_nodes:,}
 was worth orders of magnitude. Rewriting our engine in C++ afterwards would be
 worth a handful.
 

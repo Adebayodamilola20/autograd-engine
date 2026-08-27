@@ -88,8 +88,8 @@ def main() -> int:
     print(f"    test       {len(test):>7,} samples   (touched exactly once, at the end)")
     print(f"    features   {train.n_features:>7}   (28×28 flattened)")
     print(f"    classes    {train.n_classes:>7}")
-    print(f"\n    pixels scaled to [0, 1]: raw 0-255 values would hand the first")
-    print(f"    layer gradients 255x too large (see nabla/data/mnist.py).")
+    print("\n    pixels scaled to [0, 1]: raw 0-255 values would hand the first")
+    print("    layer gradients 255x too large (see nabla/data/mnist.py).")
 
     # as_arrays skips the ndarray -> list -> ndarray round trip, which profiling
     # showed was ~39% of an epoch (Phase 19). The scalar engine wants the lists.
@@ -115,7 +115,7 @@ def main() -> int:
     if args.engine == "scalar":
         nodes = 2 * sum(a * b for a, b in zip([784, *args.hidden], [*args.hidden, 10]))
         print(f"    ~{nodes:,} graph nodes per sample, all Python objects.")
-        print(f"    This is the slow path, run deliberately -- see benchmarks/.")
+        print("    This is the slow path, run deliberately -- see benchmarks/.")
 
     optimizer = (
         Adam(model.parameters(), lr=args.lr)
@@ -123,7 +123,7 @@ def main() -> int:
         else SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
     )
     print(f"    optimizer: {optimizer!r}")
-    print(f"    loss: softmax cross-entropy (log-sum-exp stabilised)")
+    print("    loss: softmax cross-entropy (log-sum-exp stabilised)")
 
     # ══════════════════════════════════════════════════════════════════
     rule("3. Training")
@@ -211,8 +211,8 @@ def main() -> int:
         "history": dict(history),
     }
     (ARTIFACTS / "mnist_results.json").write_text(json.dumps(summary, indent=2))
-    print(f"    artifacts/mnist_results.json")
-    print(f"    artifacts/mnist_checkpoints/best.json")
+    print("    artifacts/mnist_results.json")
+    print("    artifacts/mnist_checkpoints/best.json")
 
     if not args.no_plots:
         try:
@@ -230,7 +230,7 @@ def main() -> int:
                       f"({args.activation}, {args.optimizer})",
                 path=ARTIFACTS / "mnist_training_curves.png",
             )
-            print(f"    artifacts/mnist_training_curves.png")
+            print("    artifacts/mnist_training_curves.png")
 
             probs = np.exp(np.asarray(logits) - np.max(logits, axis=1, keepdims=True))
             probs /= probs.sum(axis=1, keepdims=True)
@@ -241,7 +241,7 @@ def main() -> int:
                 title="Predictions on unseen test digits",
                 path=ARTIFACTS / "mnist_predictions.png",
             )
-            print(f"    artifacts/mnist_predictions.png")
+            print("    artifacts/mnist_predictions.png")
 
             wrong = [i for i, (t, p) in enumerate(zip(true, predicted)) if t != p]
             if wrong:
@@ -252,7 +252,7 @@ def main() -> int:
                     title=f"Every one it got wrong ({len(wrong)} of {len(true)})",
                     path=ARTIFACTS / "mnist_mistakes.png",
                 )
-                print(f"    artifacts/mnist_mistakes.png")
+                print("    artifacts/mnist_mistakes.png")
 
                 worst = max(wrong, key=lambda i: confidence[i])
                 plot_prediction_detail(
@@ -260,7 +260,7 @@ def main() -> int:
                     title="Most confidently wrong prediction",
                     path=ARTIFACTS / "mnist_worst_mistake.png",
                 )
-                print(f"    artifacts/mnist_worst_mistake.png")
+                print("    artifacts/mnist_worst_mistake.png")
                 print(f"\n    Most confident mistake: expected {true[worst]}, "
                       f"predicted {predicted[worst]} with "
                       f"{confidence[worst] * 100:.1f}% confidence.")
@@ -270,7 +270,7 @@ def main() -> int:
                 title=f"MNIST confusion matrix ({test_acc * 100:.2f}% accurate)",
                 path=ARTIFACTS / "mnist_confusion.png",
             )
-            print(f"    artifacts/mnist_confusion.png")
+            print("    artifacts/mnist_confusion.png")
 
             if args.engine == "tensor":
                 plot_weight_images(
@@ -278,14 +278,14 @@ def main() -> int:
                     title="First-layer weights, reshaped to 28×28",
                     path=ARTIFACTS / "mnist_weights.png",
                 )
-                print(f"    artifacts/mnist_weights.png")
+                print("    artifacts/mnist_weights.png")
         except ImportError as err:
             print(f"    (plots skipped: {err})")
 
     rule("Result")
     print(f"    \033[1m{test_acc * 100:.2f}% test accuracy\033[0m on {len(test):,} unseen digits,")
     print(f"    trained with {model.num_parameters():,} parameters and gradients")
-    print(f"    computed entirely by our own reverse-mode autodiff engine.")
+    print("    computed entirely by our own reverse-mode autodiff engine.")
     print()
     return 0
 

@@ -150,11 +150,11 @@ rule("5. Accumulation: the other half of correctness")
 y = Value(3.0, label="y")
 z = y * y
 z.backward()
-print(f"  L = y·y at y=3.  One node, two edges into the same multiply.")
-print(f"    edge 1 contributes ∂L/∂y = y = 3")
-print(f"    edge 2 contributes ∂L/∂y = y = 3")
+print("  L = y·y at y=3.  One node, two edges into the same multiply.")
+print("    edge 1 contributes ∂L/∂y = y = 3")
+print("    edge 2 contributes ∂L/∂y = y = 3")
 print(f"    with '+='  →  y.grad = {y.grad}   ✓ (2y = 6)")
-print(f"    with '='   →  y.grad = 3.0   ✗ silently half")
+print("    with '='   →  y.grad = 3.0   ✗ silently half")
 print("""
   Ordering gets the *timing* right: a node is processed only after all of its
   consumers. Accumulation gets the *completeness* right: when it is processed,

@@ -27,7 +27,7 @@ abstractions were drawn in the right places.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Sequence
+from typing import Sequence
 
 import numpy as np
 

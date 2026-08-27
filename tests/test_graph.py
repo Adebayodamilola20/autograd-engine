@@ -12,8 +12,6 @@ a test that passes for the wrong reason is worse than no test.
 
 from __future__ import annotations
 
-import math
-
 import pytest
 
 from nabla import Value

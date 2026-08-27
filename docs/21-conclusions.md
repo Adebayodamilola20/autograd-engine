@@ -75,9 +75,9 @@ An unchecked derivative is a guess that happens to be typed in monospace.
 
 | engine | forward + backward per sample | vs next |
 |---|---|---|
-| our scalar `Value` | 2.09 s | — |
-| our tensor engine | 7.3 µs | **~285,000×** |
-| PyTorch | 4.5 µs | 1.6× |
+| our scalar `Value` | 1.68 s | — |
+| our tensor engine | 6.6 µs | **~254,000×** |
+| PyTorch | 4.7 µs | 1.4× |
 
 The step from our scalar engine to our tensor engine dwarfs the step from our
 tensor engine to PyTorch — a project with thousands of contributors and a C++

@@ -17,7 +17,6 @@ import pytest
 from nabla.core.graph import graph_size, is_topologically_sorted, topological_sort
 from nabla.core.tensor import Tensor, _unbroadcast
 
-
 # ======================================================================
 # helpers
 # ======================================================================
@@ -26,7 +25,7 @@ from nabla.core.tensor import Tensor, _unbroadcast
 def numerical_grad(fn, arrays, eps=1e-6):
     """Finite differences over ndarray inputs. Touches no backward rule."""
     grads = []
-    for k, base in enumerate(arrays):
+    for base in arrays:
         g = np.zeros_like(base)
         for idx in np.ndindex(base.shape):
             saved = base[idx]

@@ -28,7 +28,6 @@ from ..core.value import Value
 from .init import get_initializer
 from .module import Module, as_values
 from .neuron import Neuron
-from .parameter import Parameter
 
 __all__ = ["Layer"]
 

@@ -4,7 +4,14 @@
 """
 
 from .checkpoint import load_checkpoint, load_npz, save_checkpoint, save_npz
-from .metrics import EpochMetrics, RunningAverage, Timer, accuracy, argmax, confusion_counts
+from .metrics import (
+    EpochMetrics,
+    RunningAverage,
+    Timer,
+    accuracy,
+    argmax,
+    confusion_counts,
+)
 from .trainer import Trainer, TrainingHistory
 
 __all__ = [

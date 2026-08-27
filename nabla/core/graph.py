@@ -28,7 +28,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Iterator, Sequence
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from .value import Value
+    pass
 
 __all__ = [
     "topological_sort",

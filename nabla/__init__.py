@@ -20,7 +20,6 @@ data handling and inside the tensor kernels; PyTorch appears only in
     (4.0, 2.0)
 """
 
-from .core.value import Value
 from .core.graph import (
     build_edges,
     format_graph,
@@ -29,6 +28,7 @@ from .core.graph import (
     leaves,
     topological_sort,
 )
+from .core.value import Value
 
 __version__ = "0.1.0"
 

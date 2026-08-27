@@ -1,6 +1,5 @@
 """Core autodiff machinery: the node, the graph, and the tools that verify them."""
 
-from .value import Value
 from .graph import (
     build_edges,
     format_graph,
@@ -10,6 +9,7 @@ from .graph import (
     leaves,
     topological_sort,
 )
+from .value import Value
 
 __all__ = [
     "Value",

@@ -80,8 +80,12 @@ $\bar a = \bar c\,b$ and $\bar b = a\,\bar c$ — the multiplication rule from
 
 **The backward pass of a matmul is two more matmuls.** That is why a training
 step costs roughly 3× a forward pass, and why GEMM performance determines nearly
-everything about training speed. Our measured forward+backward / forward ratio
-is 1.9×; PyTorch's is 3.3×.
+everything about training speed.
+
+The prediction is checkable, and it checks out. Measured forward+backward ÷
+forward: **3.58× for us, 3.34× for PyTorch.** Two independent implementations
+land on the same structural ratio, because it is a property of the mathematics
+rather than of either codebase.
 
 ## 4. Broadcasting, and the rule that is easy to get wrong
 
@@ -157,15 +161,15 @@ granularity. If they ever diverge, one is wrong.
 
 | engine | forward + backward, per sample | vs the next |
 |---|---|---|
-| our scalar `Value` | 2.09 s | — |
-| our tensor engine | 7.3 µs | **~285,000× faster** |
-| PyTorch | 4.5 µs | 1.6× faster |
+| our scalar `Value` | 1.68 s | — |
+| our tensor engine | 6.6 µs | **~254,000× faster** |
+| PyTorch | 4.7 µs | 1.4× faster |
 
 Read that twice.
 
-The step from **our scalar engine to our tensor engine** is ~285,000×. The step
+The step from **our scalar engine to our tensor engine** is ~254,000×. The step
 from **our tensor engine to PyTorch** — a project with thousands of
-contributors, hand-tuned kernels and a C++ core — is about 1.6×.
+contributors, hand-tuned kernels and a C++ core — is about 1.4×.
 
 **Almost the entire performance story is granularity, and we captured nearly all
 of it ourselves by changing what a node represents.**

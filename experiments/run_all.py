@@ -58,11 +58,11 @@ def main() -> int:
         "--n-train", str(args.n_train),
     ]
 
-    print(f"\n\033[1mPhase 22 -- experiments\033[0m")
+    print("\n\033[1mPhase 22 -- experiments\033[0m")
     print("─" * 78)
     print(f"    {len(selected)} experiment(s), {args.seeds} seeds, {args.epochs} epochs, "
           f"{args.n_train:,} samples")
-    print(f"    output: artifacts/experiments/\n")
+    print("    output: artifacts/experiments/\n")
 
     outcomes = []
     started_all = time.perf_counter()
@@ -89,14 +89,14 @@ def main() -> int:
 
     total = time.perf_counter() - started_all
 
-    print(f"\n\033[1mSummary\033[0m")
+    print("\n\033[1mSummary\033[0m")
     print("─" * 78)
     for name, ok, elapsed in outcomes:
         mark = "✓" if ok else "✗"
         print(f"    {mark}  {name:<20} {elapsed:>7.1f}s")
     passed = sum(1 for _, ok, _ in outcomes if ok)
     print(f"\n    {passed}/{len(outcomes)} succeeded in {total:.1f}s total")
-    print(f"    results in artifacts/experiments/, written up in docs/20-experiments.md\n")
+    print("    results in artifacts/experiments/, written up in docs/20-experiments.md\n")
 
     return 0 if passed == len(outcomes) else 1
 

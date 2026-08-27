@@ -5,7 +5,6 @@ Run:  python examples/gradient_check.py
 
 from __future__ import annotations
 
-import math
 import sys
 from pathlib import Path
 
@@ -90,7 +89,7 @@ for h, estimate, err in rows:
     print(f"  {h:>10.0e} {estimate:>24.12f} {err:>18.3e}{marker}")
 
 print(f"\n  Error falls like h² (truncation), bottoms out near h≈{best_h:.0e},")
-print(f"  then climbs again as catastrophic cancellation takes over.")
+print("  then climbs again as catastrophic cancellation takes over.")
 print(f"  Best achievable relative error: {best_err:.1e} -- never the full 1e-16.")
 print("  Reverse-mode autodiff has no such trade-off. That is why we test with")
 print("  finite differences and train with autodiff.")

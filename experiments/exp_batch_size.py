@@ -175,7 +175,7 @@ def _plot(fixed, fixed_aggs, scaled, scaled_aggs) -> None:
     ax.grid(alpha=0.3)
 
     ax = axes[1]
-    for i, (b, color) in enumerate(zip(SIZES, colors)):
+    for b, color in zip(SIZES, colors):
         label = f"batch {b} (lr×{b / BASE_BATCH:g})"
         curve = mean_curve(scaled, label, "val_acc")
         if len(curve):

@@ -5,8 +5,8 @@
 matplotlib figures used by the training and experiment scripts.
 """
 
-from .graph_svg import graph_to_svg, render_svg
 from .graph_dot import render_dot, to_dot
+from .graph_svg import graph_to_svg, render_svg
 
 __all__ = ["render_svg", "graph_to_svg", "to_dot", "render_dot"]
 

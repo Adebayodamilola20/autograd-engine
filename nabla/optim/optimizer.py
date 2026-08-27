@@ -41,7 +41,7 @@ loss curve.
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable
 
 import numpy as np
 

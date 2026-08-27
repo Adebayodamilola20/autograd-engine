@@ -39,7 +39,7 @@ from nabla.core.gradcheck import check_parameter_gradients  # noqa: E402
 from nabla.data import DataLoader, Dataset  # noqa: E402
 from nabla.losses import softmax_cross_entropy  # noqa: E402
 from nabla.nn import MLP  # noqa: E402
-from nabla.optim import Adam, SGD  # noqa: E402
+from nabla.optim import SGD, Adam  # noqa: E402
 from nabla.training import Trainer, argmax  # noqa: E402
 
 ARTIFACTS = Path(__file__).resolve().parents[1] / "artifacts"
@@ -218,7 +218,7 @@ try:
         predict_prob, X, Y, title="XOR: learned decision boundary",
         path=ARTIFACTS / "xor_decision_boundary.png",
     )
-    print(f"\n    decision boundary saved to artifacts/xor_decision_boundary.png")
+    print("\n    decision boundary saved to artifacts/xor_decision_boundary.png")
 except ImportError:
     pass
 

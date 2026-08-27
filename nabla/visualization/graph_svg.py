@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import html
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Sequence
 
 from ..core.graph import topological_sort
 
