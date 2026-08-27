@@ -720,6 +720,16 @@ class Value:
         for node in reversed(order):
             node._backward()
 
+    def reset_grad(self) -> None:
+        """Zero this node's own gradient.
+
+        The one-node counterpart to ``zero_grad()``. Exists so ``Value`` and
+        ``Tensor`` present the same interface to ``Module`` and the optimisers
+        -- a ``Tensor`` must reset to a zero *array* of the right shape, which
+        a bare ``= 0.0`` would not do.
+        """
+        self.grad = 0.0
+
     def zero_grad(self) -> None:
         """Reset ``.grad`` to 0 on every node reachable from this one.
 
