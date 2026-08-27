@@ -140,6 +140,14 @@ class Optimizer:
                 param.grad *= scale
         return total
 
+    def _scalar_count(self) -> int:
+        """Number of learnable *numbers*, not parameter objects.
+
+        One tensor parameter of shape (784, 128) is a single object holding
+        100,352 learnable scalars; reporting "1" would be misleading.
+        """
+        return sum(int(np.size(p.data)) for p in self.params)
+
     def state_dict(self) -> dict[str, Any]:
         """Optimiser hyperparameters and step count, for checkpointing.
 
@@ -152,4 +160,4 @@ class Optimizer:
         self.step_count = int(state.get("step_count", 0))
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(lr={self.lr:g}, params={len(self.params):,})"
+        return f"{type(self).__name__}(lr={self.lr:g}, params={self._scalar_count():,})"

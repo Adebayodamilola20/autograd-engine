@@ -213,7 +213,7 @@ class Adam(Optimizer):
     def __repr__(self) -> str:
         return (
             f"Adam(lr={self.lr:g}, betas=({self.beta1:g}, {self.beta2:g}), "
-            f"params={len(self.params):,})"
+            f"params={self._scalar_count():,})"
         )
 
 
@@ -254,5 +254,5 @@ class AdamW(Adam):
     def __repr__(self) -> str:
         return (
             f"AdamW(lr={self.lr:g}, weight_decay={self.weight_decay:g}, "
-            f"params={len(self.params):,})"
+            f"params={self._scalar_count():,})"
         )

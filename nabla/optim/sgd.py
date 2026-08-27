@@ -200,4 +200,4 @@ class SGD(Optimizer):
             bits.append("nesterov=True")
         if self.weight_decay:
             bits.append(f"weight_decay={self.weight_decay:g}")
-        return f"SGD({', '.join(bits)}, params={len(self.params):,})"
+        return f"SGD({', '.join(bits)}, params={self._scalar_count():,})"
