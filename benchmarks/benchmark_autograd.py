@@ -65,6 +65,11 @@ def parse_args() -> argparse.Namespace:
         help="samples to time on the scalar engine (it is ~1000x slower)",
     )
     p.add_argument("--skip-scalar", action="store_true")
+    p.add_argument(
+        "--list-batches",
+        action="store_true",
+        help="feed nested lists instead of arrays -- reproduces the pre-Phase-19 path",
+    )
     p.add_argument("--out", default=str(ARTIFACTS / "bench_nabla.json"))
     return p.parse_args()
 
@@ -296,8 +301,14 @@ def main() -> int:
     rule("6. A real training epoch on MNIST")
 
     train, test = load_mnist(n_train=args.n_train, n_test=args.n_test, seed=SEED)
-    loader = DataLoader(train, batch_size=BATCH_SIZE, seed=SEED)
-    test_loader = DataLoader(test, batch_size=256, shuffle=False)
+    # as_arrays=True: the Phase 19 fast path. Setting it False here is a
+    # one-word way to reproduce the pre-optimisation numbers.
+    loader = DataLoader(
+        train, batch_size=BATCH_SIZE, seed=SEED, as_arrays=not args.list_batches
+    )
+    test_loader = DataLoader(
+        test, batch_size=256, shuffle=False, as_arrays=not args.list_batches
+    )
 
     epoch_model = TensorMLP(*_split(ARCHITECTURE), activation="relu", seed=SEED)
     epoch_opt = Adam(epoch_model.parameters(), lr=1e-3)
@@ -321,12 +332,12 @@ def main() -> int:
 
     correct = 0
     for bx, by in test_loader:
-        correct += int((epoch_model.predict(np.asarray(bx)) == np.asarray(by)).sum())
+        correct += int((epoch_model.predict(bx) == np.asarray(by)).sum())
     accuracy = correct / len(test)
 
     def inference_pass() -> None:
         for bx, _ in test_loader:
-            epoch_model.predict(np.asarray(bx))
+            epoch_model.predict(bx)
 
     t_infer = report.add(
         measure(

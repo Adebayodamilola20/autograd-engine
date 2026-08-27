@@ -91,9 +91,14 @@ def main() -> int:
     print(f"\n    pixels scaled to [0, 1]: raw 0-255 values would hand the first")
     print(f"    layer gradients 255x too large (see nabla/data/mnist.py).")
 
-    train_loader = DataLoader(train, batch_size=args.batch_size, seed=args.seed)
-    val_loader = DataLoader(val, batch_size=256, shuffle=False)
-    test_loader = DataLoader(test, batch_size=256, shuffle=False)
+    # as_arrays skips the ndarray -> list -> ndarray round trip, which profiling
+    # showed was ~39% of an epoch (Phase 19). The scalar engine wants the lists.
+    arrays = args.engine == "tensor"
+    train_loader = DataLoader(
+        train, batch_size=args.batch_size, seed=args.seed, as_arrays=arrays
+    )
+    val_loader = DataLoader(val, batch_size=256, shuffle=False, as_arrays=arrays)
+    test_loader = DataLoader(test, batch_size=256, shuffle=False, as_arrays=arrays)
 
     # ══════════════════════════════════════════════════════════════════
     rule("2. Model")

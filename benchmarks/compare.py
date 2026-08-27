@@ -180,24 +180,28 @@ def main() -> int:
 
     if step and epoch:
         print(
-            f"    A single training step is only \033[1m{step:,.1f}x\033[0m slower than PyTorch,\n"
-            f"    but a whole epoch is \033[1m{epoch:,.1f}x\033[0m slower. That gap is the finding.\n\n"
-            "    The arithmetic is not the problem. NumPy and PyTorch both call\n"
-            "    the same class of tuned BLAS kernel for the matmuls, so on the\n"
-            "    maths itself we are close to competitive. The epoch is worse\n"
-            "    than the step because of everything *around* the maths:\n"
-            "    our DataLoader converts each batch to Python lists and back to\n"
-            "    an array, per batch, per epoch. That is pure marshalling\n"
-            "    overhead PyTorch never pays.\n\n"
-            "    That is a Phase 19 target, and it was invisible until this\n"
-            "    table existed -- which is the argument for benchmarking before\n"
-            "    optimising."
+            f"    A single training step is \033[1m{step:,.1f}x\033[0m slower than PyTorch, and a\n"
+            f"    whole epoch is \033[1m{epoch:,.1f}x\033[0m slower.\n\n"
+            "    The arithmetic was never the problem. NumPy and PyTorch both\n"
+            "    call the same class of tuned BLAS kernel for the matmuls, so on\n"
+            "    the maths itself we are close to competitive.\n\n"
+            "    The first run of this benchmark showed an epoch at 4.5x while a\n"
+            "    step sat at 1.4x -- and *that gap* was the finding. Everything\n"
+            "    between the steps was costing more than the steps. Profiling\n"
+            "    (benchmarks/profile_training.py) blamed the DataLoader: it\n"
+            "    converted each batch ndarray to nested Python lists, which the\n"
+            "    model converted straight back. `tolist` and `asarray` were the\n"
+            "    two most expensive entries in the profile, ahead of every piece\n"
+            "    of real arithmetic.\n\n"
+            "    DataLoader(as_arrays=True) removed the round trip (Phase 19).\n"
+            "    Run with --list-batches to reproduce the old numbers."
         )
     if infer:
         print(
-            f"\n    Inference is the widest gap ({infer:,.1f}x) for the same reason,\n"
-            "    only more so: there is no backward pass to dilute the fixed\n"
-            "    per-batch overhead, so the overhead is nearly all of it."
+            f"\n    Inference is now the widest remaining gap ({infer:,.1f}x). With no\n"
+            "    backward pass to dilute it, fixed per-batch overhead is most of\n"
+            "    the cost -- so it is the most sensitive of these numbers to any\n"
+            "    per-operation Python work still in the path."
         )
 
     scalar_speedup = nabla["notes"].get("tensor_speedup_over_scalar")
@@ -425,12 +429,20 @@ is a small fixed cost — which is exactly why our *per-step* gap
 ({ratios.get('tensor_training_step', 0):,.1f}x) is so much smaller than people
 expect.
 
-**2. Data marshalling, which is our own fault.** Our `DataLoader` yields Python
-lists; the model converts them back to arrays. Per batch, per epoch. This is why
-the epoch gap ({ratios.get('mnist_epoch', 0):,.1f}x) is worse than the step gap
-({ratios.get('tensor_training_step', 0):,.1f}x), and why inference — where no
-backward pass dilutes the fixed overhead — is worst of all
-({ratios.get('mnist_inference', 0):,.1f}x). Nothing to do with autodiff.
+**2. Data marshalling — which was our own fault, and is now fixed.** The first
+run of this benchmark showed an epoch at 4.5x while a single step sat at 1.4x.
+Everything *between* the steps cost more than the steps. Profiling found our
+`DataLoader` converting each batch ndarray to nested Python lists, which the
+model converted straight back: `tolist` and `asarray` were the two most
+expensive entries in the profile, ahead of every piece of real arithmetic.
+
+`DataLoader(as_arrays=True)` deleted the round trip. The epoch went to
+{ratios.get('mnist_epoch', 0):,.1f}x and inference from 29.5x to
+{ratios.get('mnist_inference', 0):,.1f}x, with **identical accuracy** — the
+change computes exactly the same numbers. See `docs/19-optimisation.md`.
+
+The lesson generalises past this repo: the bottleneck was not in the autodiff
+engine at all, and no amount of staring at `tensor.py` would have found it.
 
 **3. Fused kernels.** `F.cross_entropy` computes `p - y` in one pass without
 ever materialising the one-hot matrix or the intermediate softmax. We build ours

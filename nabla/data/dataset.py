@@ -109,9 +109,30 @@ class Dataset:
 class DataLoader:
     """Yields shuffled mini-batches from a ``Dataset``.
 
-    Each iteration produces ``(batch_x, batch_y)`` where ``batch_x`` is a list
-    of feature lists and ``batch_y`` a list of targets -- the plain-Python form
-    the scalar engine consumes directly.
+    Each iteration produces ``(batch_x, batch_y)``. By default ``batch_x`` is a
+    list of feature lists and ``batch_y`` a list of targets -- the plain-Python
+    form the scalar engine consumes directly.
+
+    ``as_arrays=True`` yields NumPy arrays instead (Phase 19)
+    --------------------------------------------------------
+    The tensor engine immediately converts those lists straight back into an
+    array, so the default path does:
+
+        ndarray  --.tolist()-->  list of lists  --np.asarray()-->  ndarray
+
+    Profiling an epoch (``benchmarks/profile_training.py``) found that round
+    trip costing ~39% of the total: ``tolist`` and the matching ``asarray``
+    were the two most expensive entries in the profile, ahead of every piece of
+    actual arithmetic. It is pure marshalling -- it computes nothing.
+
+    ``as_arrays=True`` yields ``dataset.x[idx]`` directly. NumPy's fancy
+    indexing already returns a fresh copy, so batches remain independent and
+    nothing aliases the underlying dataset.
+
+    The list form stays the default because the scalar engine genuinely wants
+    Python floats: handing ``Value`` a ``np.float64`` works, but drags NumPy
+    scalar dispatch into every one of its ~300,000 operations per sample.
+    Each engine gets the representation that suits it.
 
     Parameters
     ----------
@@ -128,6 +149,8 @@ class DataLoader:
         every sample counts.
     seed
         Seeds the shuffle generator.
+    as_arrays
+        Yield NumPy arrays rather than nested lists. Use with the tensor engine.
     """
 
     def __init__(
@@ -138,6 +161,7 @@ class DataLoader:
         shuffle: bool = True,
         drop_last: bool = False,
         seed: int | None = None,
+        as_arrays: bool = False,
     ) -> None:
         if batch_size < 1:
             raise ValueError(f"batch_size must be >= 1, got {batch_size}")
@@ -146,6 +170,7 @@ class DataLoader:
         self.batch_size = min(batch_size, len(dataset)) if len(dataset) else batch_size
         self.shuffle = shuffle
         self.drop_last = drop_last
+        self.as_arrays = as_arrays
         self.rng = np.random.default_rng(seed)
 
     def __len__(self) -> int:
@@ -162,14 +187,18 @@ class DataLoader:
             idx = order[start : start + self.batch_size]
             if self.drop_last and len(idx) < self.batch_size:
                 break
-            xs = self.dataset.x[idx].tolist()
+            xs = self.dataset.x[idx]
             ys = self.dataset.y[idx]
-            yield xs, ys.tolist()
+            if self.as_arrays:
+                yield xs, ys
+            else:
+                yield xs.tolist(), ys.tolist()
 
     def __repr__(self) -> str:
+        form = "arrays" if self.as_arrays else "lists"
         return (
             f"DataLoader({self.dataset.name}, batch_size={self.batch_size}, "
-            f"{len(self)} batches)"
+            f"{len(self)} batches, {form})"
         )
 
 

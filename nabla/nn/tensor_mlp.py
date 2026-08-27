@@ -212,9 +212,15 @@ class TensorMLP(Module):
 
         Accepts a ``Tensor``, an ndarray, or a nested list, so the same
         ``Trainer`` can feed it the batches it feeds the scalar model.
+
+        ``Tensor.__init__`` already calls ``np.asarray(..., dtype=float64)``, so
+        doing it here too was a redundant conversion on the hottest path in the
+        library -- and when ``x`` arrives as a nested list, that conversion is
+        not cheap. Prefer ``DataLoader(..., as_arrays=True)``, which skips the
+        list round trip entirely (Phase 19).
         """
         if not isinstance(x, Tensor):
-            x = Tensor(np.asarray(x, dtype=np.float64))
+            x = Tensor(x)
         if x.ndim == 1:
             x = x.reshape(1, -1)
         for layer in self.layers:
