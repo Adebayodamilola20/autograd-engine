@@ -670,7 +670,7 @@ class Value:
     # ==================================================================
 
     def backward(self) -> None:
-        """Run reverse-mode autodiff from this node.
+        r"""Run reverse-mode autodiff from this node.
 
         Fills in ``.grad = ∂self/∂node`` on every node reachable from ``self``.
 
@@ -692,14 +692,39 @@ class Value:
 
         Accumulation semantics (important)
         ----------------------------------
-        This does **not** clear existing gradients first, exactly like
-        ``torch.Tensor.backward()``. Two consequences:
+        Leaf gradients **accumulate**, exactly like ``torch.Tensor.backward()``.
+        Two consequences:
 
         * Calling ``backward()`` twice sums two gradients -- which is the
           mechanism behind gradient accumulation over micro-batches.
         * A training loop **must** call ``zero_grad()`` each step, or gradients
           from every previous step keep contributing. This is the classic
           PyTorch bug, and we reproduce it on purpose rather than hide it.
+
+        Why intermediates are cleared but leaves are not
+        -----------------------------------------------
+        ``.grad`` is quietly doing *two* jobs: it stores the answer
+        :math:`\partial L/\partial\text{node}`, and during the sweep it is also
+        the **carrier** that ferries the gradient from a node down to its
+        parents. For leaves those jobs agree. For intermediates they conflict.
+
+        Consider ``u = x*x; L = u + 0`` at ``x = 3``, and call ``backward()``
+        twice without zeroing. The first sweep leaves ``u.grad = 1`` and
+        ``x.grad = 6``. The second sweep seeds ``L.grad = 1``, and the ``+``
+        rule accumulates into ``u``, giving ``u.grad = 2`` -- but that ``2`` is
+        pass-one residue, not a real derivative. The ``*`` rule then reads it
+        as the incoming gradient and pushes ``2·(2·3) = 12`` into ``x``, for a
+        total of ``18`` instead of the correct ``12``.
+
+        The gradient *flowing along an edge* belongs to one sweep and must not
+        outlive it; only the gradient *landing on a leaf* is a running total.
+        So we reset every non-leaf reachable node before sweeping. PyTorch
+        reaches the same place by a different route: it never populates
+        ``.grad`` on non-leaf tensors at all, holding edge gradients in a
+        temporary buffer that dies with the pass. That is why ``.grad`` is
+        ``None`` on intermediates there unless you ask for ``retain_grad()``.
+        We keep intermediates visible -- they are the whole point of a teaching
+        engine -- and pay for it with this one explicit reset.
 
         Cost
         ----
@@ -714,8 +739,17 @@ class Value:
         """
         order = topological_sort(self)
 
+        # Intermediates carry *this* sweep's edge gradients and nothing else,
+        # so clear them. Leaves are the running totals, so leave them alone.
+        for node in order:
+            if node._prev:
+                node.reset_grad()
+
         # ∂self/∂self = 1. Every other gradient is derived from this seed.
-        self.grad = 1.0
+        # `+=` rather than `=`: if `self` is a leaf it was deliberately not
+        # cleared above, and clobbering it would break accumulation. If `self`
+        # is an intermediate it was just zeroed, so `+=` is exactly `=`.
+        self.grad += 1.0
 
         for node in reversed(order):
             node._backward()

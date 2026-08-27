@@ -359,6 +359,68 @@ class TestGradientAccumulation:
         L.backward()
         assert x.grad == pytest.approx(6.0)  # cleared, back to one gradient
 
+    def test_repeated_backward_is_exact_when_an_intermediate_sits_between(self):
+        """Regression: intermediates must not carry gradient between sweeps.
+
+        The test above passes even with a broken engine, because ``L = x*x``
+        puts ``x`` directly under the output -- there is no intermediate to
+        contaminate. Insert one node and the bug appears:
+
+            u = x*x        u.grad after sweep 1 is 1
+            L = u + 0      sweep 2 seeds L.grad = 1 and accumulates into u,
+                           making u.grad = 2 -- pass-one residue, not a
+                           derivative. The `*` rule reads that 2 as its
+                           incoming gradient and pushes 2*(2*3) = 12 into x,
+                           totalling 18 instead of 12.
+
+        Gradient on an *edge* belongs to one sweep; gradient on a *leaf* is a
+        running total. Only leaves may survive.
+        """
+        x = Value(3.0)
+        u = x * x
+        L = u + Value(0.0)
+
+        L.backward()
+        assert x.grad == pytest.approx(6.0)
+        assert u.grad == pytest.approx(1.0)
+
+        L.backward()
+        assert x.grad == pytest.approx(12.0)  # 6 + 6, not 6 + 12
+        assert u.grad == pytest.approx(1.0)  # one sweep's worth, not 2.0
+
+        L.backward()
+        assert x.grad == pytest.approx(18.0)  # each sweep adds exactly 6
+        assert u.grad == pytest.approx(1.0)
+
+    def test_repeated_backward_is_exact_through_a_deep_chain(self):
+        """The same guarantee, but with enough depth to amplify any leak.
+
+        A broken engine compounds per level, so a 6-deep chain diverges
+        dramatically rather than subtly. f(x) = ((((((x*x)+0)*1)+0)*1)+0).
+        """
+        x = Value(2.0)
+        node = x * x
+        for _ in range(3):
+            node = (node * Value(1.0)) + Value(0.0)
+
+        for sweep in range(1, 5):
+            node.backward()
+            # d(x^2)/dx = 2x = 4, contributed once per sweep.
+            assert x.grad == pytest.approx(4.0 * sweep)
+
+    def test_seeding_a_leaf_directly_still_accumulates(self):
+        """Edge case: ``backward()`` on a node with no parents.
+
+        The output is itself a leaf, so it is never cleared. The seed must
+        therefore accumulate (``+= 1``) rather than overwrite, or a leaf's
+        running total would be silently clobbered.
+        """
+        x = Value(5.0)
+        x.backward()
+        assert x.grad == pytest.approx(1.0)
+        x.backward()
+        assert x.grad == pytest.approx(2.0)
+
     def test_two_independent_graphs_share_a_leaf(self):
         # A parameter used in two separate losses collects both gradients --
         # exactly what happens with weight sharing.

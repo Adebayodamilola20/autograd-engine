@@ -144,6 +144,22 @@ class Tensor:
 
     _counter = count()
 
+    # Hand dispatch back to us when a raw ndarray is on the left.
+    #
+    # ``arr + t`` and ``arr @ t`` do *not* start at ``Tensor.__radd__``. Python
+    # offers the left operand first, and ``ndarray`` accepts almost anything:
+    # it calls ``np.asarray(t)``, gets a 0-d object array, and either builds
+    # nonsense elementwise or raises "operand does not have enough dimensions".
+    # Either way our graph is never built and the gradient is silently lost.
+    #
+    # Setting ``__array_ufunc__ = None`` makes every numpy ufunc return
+    # ``NotImplemented`` for operands involving a ``Tensor``, so Python falls
+    # through to our reflected ``__radd__``/``__rmatmul__``/... as it should.
+    # The cost is that ``np.exp(tensor)`` now raises ``TypeError`` instead of
+    # quietly bypassing autodiff -- which is the outcome we want. Use
+    # ``tensor.exp()``, which records a node.
+    __array_ufunc__ = None
+
     def __init__(
         self,
         data: ArrayLike,
@@ -629,6 +645,12 @@ class Tensor:
         ``torch.Tensor.backward(gradient=...)`` does, and why PyTorch raises
         "grad can be implicitly created only for scalar outputs" without it.
         Now the error message makes sense.
+
+        Accumulation semantics
+        ----------------------
+        Identical to ``Value.backward`` -- leaf gradients accumulate across
+        calls, intermediates are cleared first. See that docstring for why the
+        two cases have to differ.
         """
         if gradient is None:
             if self.data.size != 1:
@@ -641,7 +663,17 @@ class Tensor:
             gradient = np.ones_like(self.data)
 
         order = topological_sort(self)
-        self.grad = np.asarray(gradient, dtype=np.float64).reshape(self.shape)
+
+        # Clear intermediates only; leaves are running totals. See
+        # ``Value.backward`` for the worked example of what goes wrong without
+        # this (a second sweep re-reads pass-one residue as a real gradient).
+        for node in order:
+            if node._prev:
+                node.reset_grad()
+
+        self.grad = self.grad + np.asarray(gradient, dtype=np.float64).reshape(
+            self.shape
+        )
         for node in reversed(order):
             node._backward()
 
