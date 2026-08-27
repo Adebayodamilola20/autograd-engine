@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nabla — a from-scratch autograd engine, recognising digits</title>
+<meta name="description" content="Draw a digit. Every number on this page is computed by a reverse-mode automatic differentiation engine written from scratch in Python.">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="brand">
+      <span class="nabla" aria-hidden="true">&nabla;</span>
+      <div>
+        <h1>nabla</h1>
+        <p class="tagline">A reverse-mode autodiff engine, written from scratch</p>
+      </div>
+    </div>
+    <dl class="stats" id="model-stats">
+      <div class="stat"><dt>Architecture</dt><dd id="stat-arch">—</dd></div>
+      <div class="stat"><dt>Parameters</dt><dd id="stat-params">—</dd></div>
+      <div class="stat"><dt>Test accuracy</dt><dd id="stat-acc">97.63%</dd></div>
+      <div class="stat"><dt>Framework</dt><dd class="accent">none</dd></div>
+    </dl>
+  </div>
+</header>
+
+<main id="main">
+
+  <p class="lede">
+    Draw a digit below. The prediction, the probabilities, and every activation
+    shown come from a neural network trained with an automatic differentiation
+    engine built from nothing — no PyTorch, no TensorFlow, no JAX. The forward
+    pass running right now is the same code that computed the gradients during
+    training.
+  </p>
+
+  <div class="grid">
+
+    <!-- ============================================ draw -->
+    <section class="panel" aria-labelledby="h-draw">
+      <div class="panel-head">
+        <h2 id="h-draw">1 &middot; Draw</h2>
+        <span class="hint">Mouse, trackpad or finger</span>
+      </div>
+
+      <div class="canvas-wrap">
+        <canvas id="pad" width="280" height="280"
+                role="img"
+                aria-label="Drawing area. Draw a single digit from 0 to 9."
+                tabindex="0"></canvas>
+        <p class="canvas-placeholder" id="placeholder">Draw a digit</p>
+      </div>
+
+      <div class="controls">
+        <button type="button" id="clear" class="btn">Clear</button>
+        <button type="button" id="random" class="btn">Random example</button>
+        <label class="stroke-control">
+          <span>Stroke</span>
+          <input type="range" id="stroke" min="12" max="34" value="22"
+                 aria-label="Stroke width">
+        </label>
+      </div>
+
+      <div class="preprocess">
+        <div class="preprocess-text">
+          <h3>What the network actually sees</h3>
+          <p>
+            MNIST digits are cropped to their ink, scaled to fit a 20&times;20
+            box, then centred by <em>centre of mass</em> in a 28&times;28 frame.
+            Your drawing gets the same treatment — skip it and accuracy
+            collapses, because the model never saw off-centre digits.
+          </p>
+        </div>
+        <canvas id="preview" width="28" height="28"
+                aria-label="The 28 by 28 downscaled image sent to the network"></canvas>
+      </div>
+    </section>
+
+    <!-- ============================================ predict -->
+    <section class="panel" aria-labelledby="h-predict">
+      <div class="panel-head">
+        <h2 id="h-predict">2 &middot; Predict</h2>
+        <span class="hint" id="timing">&nbsp;</span>
+      </div>
+
+      <div class="verdict" aria-live="polite" aria-atomic="true">
+        <div class="verdict-digit" id="verdict">?</div>
+        <div class="verdict-meta">
+          <p class="verdict-confidence" id="confidence">Waiting for a digit</p>
+          <p class="verdict-runner" id="runner"></p>
+        </div>
+      </div>
+
+      <h3 class="bars-title">Class probabilities</h3>
+      <ul class="bars" id="bars"></ul>
+
+      <p class="footnote">
+        These ten numbers are a <strong>softmax</strong> over the network's raw
+        outputs (logits), so they are non-negative and sum to exactly 1. During
+        training the same softmax fed a cross-entropy loss, and its gradient
+        <code>(p &minus; y)/N</code> is what every weight update descended.
+      </p>
+    </section>
+
+    <!-- ============================================ inspect -->
+    <section class="panel panel-wide" aria-labelledby="h-inspect">
+      <div class="panel-head">
+        <h2 id="h-inspect">3 &middot; Inspect</h2>
+        <span class="hint">Inside the forward pass</span>
+      </div>
+
+      <div class="inspect-grid">
+        <div>
+          <h3>Architecture</h3>
+          <ul class="layers" id="layers"></ul>
+          <p class="footnote">
+            Every layer is one <code>x @ W + b</code> — a single node in the
+            computational graph. The scalar engine builds ~328,000 nodes for the
+            same arithmetic; this builds 33.
+          </p>
+        </div>
+
+        <div>
+          <h3>Activations</h3>
+          <div id="activations" class="activations">
+            <p class="empty">Draw a digit to see the signal move through the network.</p>
+          </div>
+          <p class="footnote" id="sparsity-note"></p>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <section class="explainer" aria-labelledby="h-how">
+    <h2 id="h-how">How this works underneath</h2>
+    <div class="explainer-grid">
+      <article>
+        <h3>The graph</h3>
+        <p>
+          Each operation builds a node holding its result, its parents, and a
+          closure that knows its own local derivative. Running the forward pass
+          <em>is</em> building the graph.
+        </p>
+      </article>
+      <article>
+        <h3>The chain rule</h3>
+        <p>
+          <code>backward()</code> topologically sorts that graph, seeds
+          <code>&part;L/&part;L = 1</code>, and walks it in reverse, multiplying
+          local derivatives as it goes. Every gradient falls out of that one
+          sweep.
+        </p>
+      </article>
+      <article>
+        <h3>Why it's fast enough</h3>
+        <p>
+          Because a node is a whole tensor, not a single number. Same
+          mathematics, same gradients — but 285,000&times; faster than the
+          scalar version, and within 1.2&times; of PyTorch per epoch.
+        </p>
+      </article>
+      <article>
+        <h3>Verified, not assumed</h3>
+        <p>
+          Every backward rule is checked against finite differences,
+          <code>(f(x+&epsilon;) &minus; f(x&minus;&epsilon;))/2&epsilon;</code>,
+          across 692 tests. A derivative you have not checked numerically is a
+          guess.
+        </p>
+      </article>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p>
+    Served by <code>web/server.py</code> — Python standard library, no web
+    framework. Predictions computed by <code>nabla</code>.
+  </p>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

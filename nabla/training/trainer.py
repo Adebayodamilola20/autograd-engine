@@ -296,6 +296,20 @@ class Trainer:
             epoch. Decaying the learning rate late in training lets the
             optimiser settle into a minimum instead of bouncing around it.
         """
+        # Architecture travels with the weights. A checkpoint whose shape you
+        # have to reverse-engineer from matrix dimensions is a checkpoint that
+        # cannot be loaded without the script that wrote it -- and the
+        # activation function is not recoverable from the shapes at all.
+        # ``web/server.py`` reconstructs the model from exactly this.
+        architecture = {
+            "engine": self.engine,
+            "class": type(self.model).__name__,
+            "sizes": list(getattr(self.model, "sizes", [])),
+            "activation": getattr(self.model, "activation_name", None),
+            "output_activation": getattr(self.model, "output_activation_name", None),
+            "parameters": self.model.num_parameters(),
+        }
+
         maximise = not checkpoint_metric.endswith("loss")
         best_score = -math.inf if maximise else math.inf
         best_epoch = -1
@@ -351,7 +365,11 @@ class Trainer:
                             optimizer=self.optimizer,
                             epoch=epoch,
                             history=dict(self.history),
-                            metadata={"best_metric": checkpoint_metric, "score": score},
+                            metadata={
+                                "best_metric": checkpoint_metric,
+                                "score": score,
+                                "architecture": architecture,
+                            },
                         )
                 else:
                     since_improvement += 1
@@ -363,6 +381,7 @@ class Trainer:
                     optimizer=self.optimizer,
                     epoch=epoch,
                     history=dict(self.history),
+                    metadata={"architecture": architecture},
                 )
 
             if (
