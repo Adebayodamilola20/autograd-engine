@@ -315,7 +315,7 @@ vary by over 15 percentage points across seeds.
 ## Getting started
 
 ```bash
-git clone <this repo> && cd autograd-engine
+git clone https://github.com/Adebayodamilola20/autograd-engine.git && cd autograd-engine
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt          # numpy, matplotlib
 
