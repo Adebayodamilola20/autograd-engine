@@ -8,10 +8,11 @@ No PyTorch. No TensorFlow. No JAX. The computational graph, the backward pass,
 the neural network, the optimisers and the training loop are all implemented
 here, from the mathematics up.
 
-[![tests](https://img.shields.io/badge/tests-737%20passing-22c55e)]()
-[![MNIST](https://img.shields.io/badge/MNIST-97.63%25-22c55e)]()
-[![gradient checks](https://img.shields.io/badge/gradient%20checks-183-4c72b0)]()
-[![python](https://img.shields.io/badge/python-3.10%2B-4c72b0)]()
+[![tests](https://github.com/Adebayodamilola20/autograd-engine/actions/workflows/tests.yml/badge.svg)](https://github.com/Adebayodamilola20/autograd-engine/actions/workflows/tests.yml)
+[![MNIST](https://img.shields.io/badge/MNIST-97.63%25-22c55e)](docs/14-mnist.md)
+[![gradient checks](https://img.shields.io/badge/gradient%20checks-183-4c72b0)](docs/06-gradient-checking.md)
+[![python](https://img.shields.io/badge/python-3.10%20%E2%80%93%203.13-4c72b0)](https://github.com/Adebayodamilola20/autograd-engine/actions/workflows/tests.yml)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 </div>
 
