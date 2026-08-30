@@ -25,11 +25,11 @@ comparison least flattering to us, which is the only kind worth publishing.
 
 | operation | nabla | PyTorch | PyTorch faster by |
 |---|---|---|---|
-| forward (batch of 64) | 118.4 µs | 90.5 µs | 1.3x |
-| forward + backward | 424.1 µs | 301.9 µs | 1.4x |
-| full training step | 882.0 µs | 609.1 µs | 1.4x |
-| one MNIST epoch | 160.7 ms | 88.7 ms | 1.8x |
-| inference over test set | 4.6 ms | 2.1 ms | 2.2x |
+| forward (batch of 64) | 117.6 µs | 85.0 µs | 1.4x |
+| forward + backward | 507.2 µs | 281.4 µs | 1.8x |
+| full training step | 859.7 µs | 577.2 µs | 1.5x |
+| one MNIST epoch | 262.2 ms | 226.6 ms | 1.2x |
+| inference over test set | 7.2 ms | 2.5 ms | 2.9x |
 
 Accuracy after 1 epoch(s) on
 10,000 samples:
@@ -41,8 +41,8 @@ are actually solving the same problem, and they are. (They do not match
 *exactly*: we initialise with He normal, PyTorch with Kaiming uniform, and the
 shuffles differ.)
 
-Peak RSS: 1,510 MiB (ours) vs
-980 MiB (PyTorch). Ours is inflated by the scalar-engine
+Peak RSS: 1,452 MiB (ours) vs
+750 MiB (PyTorch). Ours is inflated by the scalar-engine
 graph built earlier in the same process — 328,804
 live Python objects is not free.
 
@@ -50,14 +50,14 @@ live Python objects is not free.
 
 | engine | forward + backward, per sample | vs the next one up |
 |---|---|---|
-| our scalar `Value` engine | 1.68 s | — |
-| our tensor engine | 6.6 µs | **253,978x faster** |
-| PyTorch | 4.7 µs | 1.4x faster |
+| our scalar `Value` engine | 5.25 s | — |
+| our tensor engine | 7.9 µs | **662,341x faster** |
+| PyTorch | 4.4 µs | 1.8x faster |
 
 Read that table twice. The step from *our scalar engine* to *our tensor engine*
-is roughly **253,978x**. The step from our tensor engine to PyTorch — a
+is roughly **662,341x**. The step from our tensor engine to PyTorch — a
 project with thousands of contributors, hand-tuned kernels, and a C++ core — is
-about **1.4x**.
+about **1.8x**.
 
 Almost the entire performance story is **granularity**, and we captured most of
 it ourselves by changing what a node in the graph represents. Both engines
@@ -75,7 +75,7 @@ allocates a `Tensor` object, a `_prev` tuple and a `_backward` closure for every
 operation in the graph. PyTorch records the same information in C++ structs.
 For a graph of 33 nodes that
 is a small fixed cost — which is exactly why our *per-step* gap
-(1.4x) is so much smaller than people
+(1.5x) is so much smaller than people
 expect.
 
 **2. Data marshalling — which was our own fault, and is now fixed.** The first
@@ -86,8 +86,8 @@ model converted straight back: `tolist` and `asarray` were the two most
 expensive entries in the profile, ahead of every piece of real arithmetic.
 
 `DataLoader(as_arrays=True)` deleted the round trip. The epoch went to
-1.8x and inference from 29.5x to
-2.2x, with **identical accuracy** — the
+1.2x and inference from 29.5x to
+2.9x, with **identical accuracy** — the
 change computes exactly the same numbers. See `docs/19-optimisation.md`.
 
 The lesson generalises past this repo: the bottleneck was not in the autodiff
