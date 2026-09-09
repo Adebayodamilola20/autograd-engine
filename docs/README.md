@@ -48,6 +48,8 @@ the code, not a substitute for it — every claim here is implemented in
 | 19 | [Profiling and optimisation](19-optimisation.md) | Finding the real bottleneck, which was not where anyone expected |
 | 20 | [Experiments](20-experiments.md) | Learning rate, activations, depth, width, optimisers, batch size |
 | 21 | [What we learned](21-conclusions.md) | Honest conclusions and future work |
+| 22 | [A transformer](22-transformer.md) | GPT on the same engine, with no new backward rules |
+| 23 | [Spiking networks](23-spiking.md) | Surrogate gradients, and an A/B the new idea lost |
 
 ---
 

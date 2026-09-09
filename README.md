@@ -104,6 +104,38 @@ The demo shows the prediction, the full class distribution, and **live per-layer
 activations**, including the ~50% of hidden units that go silent on any given
 digit. That is ReLU, made visible.
 
+Or train a language model on your own text and make it write:
+
+```bash
+nabla train-lm yourbook.txt --steps 3000 --save model.json
+nabla generate model.json --prompt "Once upon a "
+```
+
+Same architecture as GPT: multi-head causal self-attention, LayerNorm, GELU,
+residual connections, weight tying.
+
+An 810k-parameter model, trained on tinyshakespeare for 4,000 steps in **8.8
+minutes on a laptop CPU**, taken from validation loss 4.25 (chance) to 1.71,
+perplexity 65 to 5.5:
+
+```
+QUEEN:
+Goland thee, to so atter moniners of this sous
+the perform, to the worthy hands distress
+Till not be than their fight, worse of sell membere,
+As charge me:--lo marry become the love.
+
+SAMPSON:
+My lord,
+Lord is thy crief, my brother never r
+```
+
+Nobody will mistake that for Shakespeare. But nothing told it about speaker
+names, colons, blank lines between speeches, or verse line lengths: it learned
+all of it, character by character, from the gradient rule in
+[`value.py`](nabla/core/value.py). See [the honest limits](#honest-limits) for
+what this does and does not buy you.
+
 ---
 
 ## What automatic differentiation is
@@ -199,6 +231,24 @@ checkpointing (model *and* optimiser state), early stopping, LR schedules.
 
 **A tensor engine**: the same reverse-mode algorithm where a node is an array
 instead of a float. Broadcasting, reductions, matmul, reshape, transpose.
+
+**A transformer**: `Embedding`, `LayerNorm`, `GELU`, multi-head causal
+self-attention, and a full GPT, with byte-level BPE and character tokenizers.
+Every layer is gradient-checked against finite differences, including the whole
+model end to end.
+
+This needed **no new backward rules**. A transformer turns out to be an
+arrangement of matrix multiplies, softmax and addition that the engine already
+differentiated: embedding lookup is `weight[ids]`, whose backward is the
+scatter-add `__getitem__` already performed, and attention is two batched
+matmuls that differentiate with the same code as a 2-D one. Which is the whole
+argument of this repository, stated in one file.
+
+**Spiking networks**: LIF neurons, three surrogate gradients, and
+backpropagation through time. The one place a backward pass is deliberately
+*not* the derivative of its forward pass, because the forward pass is a step
+function whose true derivative is zero everywhere. Includes an A/B against the
+dense network that the spiking arm lost: see below.
 
 ## Why frameworks are built around tensors
 
@@ -334,11 +384,13 @@ python examples/backprop_step_by_step.py  # one backward pass, narrated
 python examples/gradient_check.py         # every rule vs finite differences
 python examples/train_xor.py              # the smallest real network
 python examples/train_mnist.py            # 97.63%
+python examples/train_language_model.py   # a GPT that writes text
 
 python -m pytest                          # 737 tests
 python benchmarks/compare.py              # vs PyTorch, regenerates docs/18
 python benchmarks/profile_training.py     # where the time goes
 python experiments/run_all.py             # the five sweeps
+python experiments/exp_spiking_ab.py      # spiking vs dense, the A/B above
 python web/server.py                      # the interactive demo
 ```
 
@@ -375,6 +427,8 @@ is](docs/01-what-is-automatic-differentiation.md) ·
 [losses and numerical stability](docs/10-losses.md) ·
 [scalars → tensors](docs/15-tensors.md) ·
 [vs PyTorch](docs/18-performance.md) ·
+[a transformer, with no new autodiff](docs/22-transformer.md) ·
+[spiking networks, and an A/B I lost](docs/23-spiking.md) ·
 [what I learned](docs/21-conclusions.md)
 
 ## What I learned
@@ -398,6 +452,93 @@ is nearly useless. Two numbers that cannot both be true is a map to the bug.
 
 **Granularity beat every other optimisation available**, by five orders of
 magnitude.
+
+## An A/B test I lost
+
+Spiking neural networks are argued for on energy: activations are binary, so a
+synapse whose input did not spike does no work, and one whose input did needs
+an add rather than a multiply-accumulate. The claimed trade is some accuracy
+for much less energy.
+
+I tested it. One starting point, two arms, identical split, identical 101,770
+parameters, identical optimiser, three frozen seeds, held-out test set touched
+once:
+
+| arm | test accuracy | spikes/image | simulated energy |
+|---|---|---|---|
+| dense | **97.69% ± 0.12%** | n/a | **467.5 nJ** |
+| spiking | 97.29% ± 0.11% | 1,423 | 489.1 nJ |
+
+Paired difference **-0.40% ± 0.22%**, negative on all three seeds. It lost the
+accuracy, as expected. **It also lost on energy, at 1.05x, which was not
+expected**, and that is the more interesting half.
+
+The itemised budget says why:
+
+| term | energy |
+|---|---|
+| static input layer (MACs) | **461.6 nJ** |
+| spike-driven synapses | 13.1 nJ |
+| membrane updates | 14.7 nJ |
+
+The spike-driven part is genuinely 36x cheaper than the dense equivalent. It
+does not matter, because it is 3% of the budget. Injecting a static image as
+analog current makes the first layer a full dense layer of real multiplies, and
+on this architecture that single term is 99% of the dense network's entire
+cost. Membrane updates, charged every timestep even to a silent network, exceed
+the whole spike-driven saving on their own.
+
+Sweeping the simulation length made it sharper. From T=5 to T=50, accuracy
+moves 0.06% while energy climbs 11%: **the extra timesteps buy nothing at
+all.** With a static image every timestep sees identical input, so there is no
+temporal structure for the leak to integrate, and the mechanism that
+distinguishes a spiking neuron from a step function is dead weight on this
+task.
+
+The gap also survives tuning the spiking arm's learning rate separately, so it
+is not an artefact of the matched setting.
+
+This does not show spiking networks are a bad idea. It shows that static images
+in a shallow network is close to the least favourable setting they could be
+tested in, and that the energy argument does not survive honest accounting of
+the input layer and the membrane updates. [The full
+chapter](docs/23-spiking.md) states what would change the answer.
+
+## Honest limits
+
+The transformer is architecturally the same thing GPT is. It is not the same
+size, and no amount of architectural fidelity substitutes for scale.
+
+Measured on this machine, one training step of the shipped `GPT` class:
+
+| d_model | layers | context | batch | parameters | s/step | tokens/s |
+|---|---|---|---|---|---|---|
+| 64 | 2 | 32 | 8 | 106,304 | 0.017 | 15,332 |
+| 96 | 3 | 48 | 12 | 346,560 | 0.085 | 6,795 |
+| 128 | 4 | 64 | 8 | 809,856 | 0.152 | 3,370 |
+| 128 | 4 | 64 | 16 | 809,856 | 0.427 | 2,399 |
+| 192 | 4 | 64 | 16 | 1,804,608 | 0.821 | 1,247 |
+
+So the practical ceiling is **one to two million parameters**, and a real
+training run is minutes to hours rather than days. That is enough to learn the
+structure of English: real words, local grammar, punctuation, the shape of
+dialogue. It is nowhere near enough for conversation, reasoning, or factual
+recall, which need parameter counts three to five orders of magnitude larger
+and hardware to match.
+
+The gap is not a missing feature. It is CPU NumPy against a datacentre:
+
+- **no GPU.** The scalar engine is Python objects, where the bottleneck is the
+  interpreter and a GPU cannot help. The tensor engine is NumPy, which is
+  CPU-only. Reaching a GPU means swapping the NumPy backend for CuPy or JAX, or
+  adding a device abstraction over the tensor ops: a real project, not a flag.
+- **no kernel fusion, no mixed precision, no distributed training.**
+- **attention is quadratic in context length,** with none of the tricks
+  (FlashAttention and friends) that make long contexts affordable.
+
+If you need a large model, use PyTorch. What this offers instead is that every
+gradient in the thing is readable Python, and independently verified against
+finite differences.
 
 ## Future work
 
