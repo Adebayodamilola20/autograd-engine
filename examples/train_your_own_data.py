@@ -66,6 +66,7 @@ from nabla.losses.tensor_losses import tensor_cross_entropy  # noqa: E402
 from nabla.nn.tensor_mlp import TensorMLP  # noqa: E402
 from nabla.optim import Adam  # noqa: E402
 from nabla.training import Trainer  # noqa: E402
+from nabla.training.checkpoint import save_checkpoint  # noqa: E402
 
 
 def rule(title: str) -> None:
@@ -112,17 +113,26 @@ def synthetic(n_rows: int = 2000, n_features: int = 8) -> tuple[np.ndarray, np.n
     return x, y, [f"feature_{i}" for i in range(n_features)]
 
 
-def standardise(train_x: np.ndarray, val_x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def standardise(
+    train_x: np.ndarray, val_x: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Zero mean, unit variance -- using the **training** statistics for both.
 
     The ``1e-8`` guards a constant column, which has zero standard deviation
     and would otherwise divide by zero. Such a column carries no information
     anyway; this keeps it harmless instead of poisoning the whole matrix
     with NaN.
+
+    The mean and standard deviation are returned, not just applied. A model
+    trained on standardised columns only means anything on standardised
+    columns, so anything that later scores fresh rows needs these exact
+    numbers. Recomputing them from the new rows would be a different
+    transform, and the predictions would be quietly wrong rather than
+    obviously broken -- which is why they travel with the checkpoint.
     """
     mean = train_x.mean(axis=0)
     std = train_x.std(axis=0) + 1e-8
-    return (train_x - mean) / std, (val_x - mean) / std
+    return (train_x - mean) / std, (val_x - mean) / std, mean, std
 
 
 # ----------------------------------------------------------------------
@@ -137,6 +147,8 @@ def main() -> int:
     p.add_argument("--lr", type=float, default=0.01)
     p.add_argument("--val-fraction", type=float, default=0.2)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--save", type=Path, default=None,
+                   help="write the trained model to this .npz for `nabla predict`")
     args = p.parse_args()
 
     rule("1. The data")
@@ -166,7 +178,7 @@ def main() -> int:
         stratify=True,
         seed=args.seed,
     )
-    train.x, val.x = standardise(train.x, val.x)
+    train.x, val.x, mean, std = standardise(train.x, val.x)
     print(f"  train {len(train):,}   validation {len(val):,}   (stratified)")
     print("  standardised on training statistics only -- val never leaks in")
 
@@ -223,8 +235,35 @@ def main() -> int:
         print("    Training and validation are tracking each other, and the model")
         print("    beats the baseline. That is what learning looks like.")
 
+    if args.save:
+        # `sizes` and `activation` are what `nabla predict` reads back to
+        # rebuild the network; `normalisation` is what lets it feed raw CSV
+        # columns through the same transform this run trained on. Without the
+        # latter the weights load fine and every prediction is wrong, which is
+        # the worst of the available failure modes.
+        path = save_checkpoint(
+            args.save,
+            model=model,
+            epoch=len(history["train_loss"]),
+            history=dict(history),
+            metadata={
+                "architecture": {
+                    "sizes": [x.shape[1], *args.hidden, n_classes],
+                    "activation": "relu",
+                },
+                "normalisation": {
+                    "mean": mean.tolist(),
+                    "std": std.tolist(),
+                },
+                "columns": columns,
+                "val_accuracy": float(best),
+            },
+        )
+        print(f"\n    saved to {path}")
+        print(f"      nabla predict {path} new_rows.csv")
+
     print("\n    To use your own file:")
-    print("      python examples/train_your_own_data.py --csv your.csv")
+    print("      nabla train your.csv --save model.json")
     print("    Last column is the label; every other column is a feature.")
     return 0
 

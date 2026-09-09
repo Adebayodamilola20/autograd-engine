@@ -57,6 +57,8 @@ BANNER = f"""
   {_b("repl")}     interactive shell: type maths, get derivatives
   {_b("train")}    train a network on a CSV
   {_b("predict")}  run a trained checkpoint over new rows
+  {_b("train-lm")} train a GPT-style language model on your own text
+  {_b("generate")} write text with a trained language model
   {_b("demo")}     launch the draw-a-digit web demo
   {_b("bench")}    measure against PyTorch
 
@@ -178,7 +180,11 @@ def cmd_repl(args: argparse.Namespace) -> int:
 
         try:
             point = parse_assignments(assignments.replace(",", " ").split())
-            out, env = evaluate(expression.strip(), point)
+            out, env = evaluate(
+                expression.strip(),
+                point,
+                hint="add: at {assignments}",
+            )
             out.backward()
             _report(expression.strip(), point, out, env)
         except ExpressionError as exc:
@@ -212,6 +218,8 @@ def cmd_train(args: argparse.Namespace) -> int:
         forwarded += [flag, str(value)]
     if args.hidden:
         forwarded += ["--hidden", *[str(h) for h in args.hidden]]
+    if args.save:
+        forwarded += ["--save", str(args.save)]
 
     return _run_script("examples/train_your_own_data.py", forwarded)
 
@@ -244,11 +252,27 @@ def cmd_predict(args: argparse.Namespace) -> int:
             f"{sizes[0]} features"
         )
 
+    # Training standardised its columns, so the weights are only meaningful on
+    # standardised input. Applying the *training* mean and standard deviation
+    # here is what makes the two halves agree. Skipping this step does not
+    # raise: it silently produces confident predictions from a model being fed
+    # inputs on a scale it never saw.
+    norm = payload.get("metadata", {}).get("normalisation") or {}
+    if norm:
+        rows = (rows - np.asarray(norm["mean"])) / np.asarray(norm["std"])
+    else:
+        print(
+            f"  note: {args.checkpoint} stores no normalisation statistics, so "
+            "rows are scored as-is;\n  if it was trained on standardised "
+            "features these predictions are unreliable.\n",
+            file=sys.stderr,
+        )
+
     model = TensorMLP(
         sizes[0], list(sizes[1:-1]), sizes[-1],
         activation=arch.get("activation") or "relu", seed=0,
     )
-    load_checkpoint(args.checkpoint, model=model)
+    model.load_state_dict(payload["model"])
 
     probabilities = model.predict_proba(rows)
     predictions = probabilities.argmax(axis=-1)
@@ -259,6 +283,82 @@ def cmd_predict(args: argparse.Namespace) -> int:
             print(f"  ... {len(predictions) - args.limit:,} more")
             break
         print(f"  {i:>3}  {int(p):>10}  {probs.max():>10.2%}")
+    return 0
+
+
+# ======================================================================
+# language model
+# ======================================================================
+
+
+def cmd_train_lm(args: argparse.Namespace) -> int:
+    forwarded: list[str] = []
+    if args.text:
+        forwarded += ["--text", str(args.text)]
+    if args.save:
+        forwarded += ["--save", str(args.save)]
+    for flag, value in (
+        ("--tokenizer", args.tokenizer),
+        ("--vocab-size", args.vocab_size),
+        ("--block-size", args.block_size),
+        ("--d-model", args.d_model),
+        ("--n-head", args.n_head),
+        ("--n-layer", args.n_layer),
+        ("--batch-size", args.batch_size),
+        ("--steps", args.steps),
+        ("--lr", args.lr),
+        ("--seed", args.seed),
+        ("--prompt", args.prompt),
+    ):
+        forwarded += [flag, str(value)]
+    return _run_script("examples/train_language_model.py", forwarded)
+
+
+def cmd_generate(args: argparse.Namespace) -> int:
+    import numpy as np
+
+    from ..data.tokenizer import load_tokenizer
+    from ..nn.transformer import GPT
+    from ..training.checkpoint import load_checkpoint
+
+    payload = load_checkpoint(args.checkpoint)
+    metadata = payload.get("metadata") or {}
+    if metadata.get("kind") != "gpt":
+        raise SystemExit(
+            f"{args.checkpoint} is not a language model checkpoint; "
+            "`nabla generate` needs one written by `nabla train-lm`"
+        )
+
+    model = GPT(**metadata["config"])
+    model.load_state_dict(payload["model"])
+    tokenizer = load_tokenizer(metadata["tokenizer"])
+
+    prompt = tokenizer.encode(args.prompt)
+    if not prompt:
+        raise SystemExit(
+            f"none of {args.prompt!r} is in this model's vocabulary, so there "
+            "is nothing to continue from; try a prompt using the training text"
+        )
+
+    ids = model.generate(
+        prompt,
+        args.tokens,
+        temperature=args.temperature,
+        top_k=args.top_k,
+        rng=np.random.default_rng(args.seed),
+    )
+    text = tokenizer.decode(ids)
+    # Split on what the prompt became after a round trip, not on the raw
+    # string. A tokenizer need not preserve its input -- `CharTokenizer` drops
+    # characters it has no id for -- so slicing at `len(args.prompt)` would
+    # eat the first few characters the model actually generated and echo a
+    # prompt it never saw.
+    echoed = tokenizer.decode(prompt)
+    continuation = text[len(echoed):]
+
+    # The prompt is dim and the continuation bright, so it is obvious which
+    # words the model produced rather than were handed to it.
+    print(_dim(echoed) + continuation if _TTY else text)
     return 0
 
 
@@ -313,7 +413,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = subparsers.add_parser("grad", help="differentiate an expression at a point")
     p.add_argument("expression", help='for example: "x*y + x"')
-    p.add_argument("--at", nargs="*", default=[], metavar="name=value",
+    # `extend`, not the default `store`: writing `--at x=2 --at y=3` is at
+    # least as natural as `--at x=2 y=3`, and with plain `store` the second
+    # flag silently discards the first, so the command fails complaining that
+    # `x` is missing when the user plainly supplied it.
+    p.add_argument("--at", action="extend", nargs="*", default=[],
+                   metavar="name=value",
                    help="where to evaluate, e.g. --at x=2 y=3")
     p.add_argument("--check", action="store_true",
                    help="verify against finite differences")
@@ -321,7 +426,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = subparsers.add_parser("graph", help="render the computational graph")
     p.add_argument("expression")
-    p.add_argument("--at", nargs="*", default=[], metavar="name=value")
+    p.add_argument("--at", action="extend", nargs="*", default=[],
+                   metavar="name=value")
     p.add_argument("-o", "--output", default="graph.svg",
                    help="output path; .dot writes Graphviz instead of SVG")
     p.add_argument("--label", default="L", help="name for the output node")
@@ -343,7 +449,40 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--lr", type=float, default=0.01)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--save", type=Path, default=None,
+                   help="write the trained model here, for `nabla predict`")
     p.set_defaults(func=cmd_train)
+
+    p = subparsers.add_parser("train-lm", help="train a language model on text")
+    p.add_argument("text", nargs="?", type=Path,
+                   help="a plain text file; omit for a built-in corpus")
+    p.add_argument("--tokenizer", choices=["char", "bpe"], default="char")
+    p.add_argument("--vocab-size", type=int, default=512)
+    p.add_argument("--block-size", type=int, default=64,
+                   help="context window, in tokens")
+    p.add_argument("--d-model", type=int, default=128)
+    p.add_argument("--n-head", type=int, default=4)
+    p.add_argument("--n-layer", type=int, default=4)
+    p.add_argument("--batch-size", type=int, default=16)
+    p.add_argument("--steps", type=int, default=1500)
+    p.add_argument("--lr", type=float, default=1e-3,
+                   help="1e-3 measured best at 4 layers; see the example script")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--prompt", default="The ", help="seed text for the sample")
+    p.add_argument("--save", type=Path, help="write the trained model here")
+    p.set_defaults(func=cmd_train_lm)
+
+    p = subparsers.add_parser("generate", help="write text with a trained model")
+    p.add_argument("checkpoint", type=Path)
+    p.add_argument("--prompt", default="The ")
+    p.add_argument("-n", "--tokens", type=int, default=300,
+                   help="how many new tokens to write")
+    p.add_argument("--temperature", type=float, default=0.8,
+                   help="below 1 is safer and more repetitive, above 1 wilder")
+    p.add_argument("--top-k", type=int, default=20,
+                   help="sample only from the k most likely tokens")
+    p.add_argument("--seed", type=int, default=None)
+    p.set_defaults(func=cmd_generate)
 
     p = subparsers.add_parser("predict", help="run a trained checkpoint over new rows")
     p.add_argument("checkpoint", type=Path)

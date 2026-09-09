@@ -154,9 +154,22 @@ class Tui:
 
         # --- header ---------------------------------------------------
         self._put(0, 2, "∇ nabla", curses.color_pair(C_ACC) | curses.A_BOLD)
-        self._put(0, 10, "gradient workspace", curses.color_pair(C_DIM))
+
+        # The hint is right-aligned and the subtitle left-aligned, so on a
+        # narrow terminal they collide and the subtitle is rendered as
+        # "gradient workenter evaluate...". Drop whichever does not fit rather
+        # than overprinting: the key hints are the more useful of the two.
+        subtitle, subtitle_x = "gradient workspace", 10
         hint = "  ".join(f"{k} {v}" for k, v in HELP)
-        self._put(0, max(12, width - len(hint) - 3), hint, curses.color_pair(C_DIM))
+        hint_x = width - len(hint) - 3
+
+        if hint_x > subtitle_x + len(subtitle) + 2:
+            self._put(0, subtitle_x, subtitle, curses.color_pair(C_DIM))
+            self._put(0, hint_x, hint, curses.color_pair(C_DIM))
+        elif hint_x > subtitle_x:
+            self._put(0, hint_x, hint, curses.color_pair(C_DIM))
+        else:
+            self._put(0, subtitle_x, subtitle, curses.color_pair(C_DIM))
         self._rule(1, width)
 
         body_top, body_bottom = 2, height - 4

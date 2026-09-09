@@ -224,6 +224,7 @@ def evaluate(
     point: Mapping[str, float],
     *,
     require_all: bool = True,
+    hint: str = "pass --at {assignments}",
 ) -> tuple[Value, dict[str, Value]]:
     """Build the graph for ``expression`` at ``point``.
 
@@ -238,16 +239,23 @@ def evaluate(
         Raise if ``expression`` mentions a variable ``point`` does not supply.
         The alternative -- quietly defaulting to zero -- would return a
         confident wrong answer, which is worse than an error.
+    hint
+        How to supply the missing values, as a template containing
+        ``{assignments}``. The default names the ``--at`` flag, which is right
+        at the command line and wrong inside the REPL: there is no ``--at``
+        there, and telling someone to type a flag their prompt cannot accept
+        is worse than saying nothing. The REPL passes its own ``at`` form.
     """
     tree = _parse(expression)
 
     if require_all:
         missing = [name for name in free_variables(expression) if name not in point]
         if missing:
+            assignments = " ".join(f"{m}=<number>" for m in missing)
             raise ExpressionError(
                 f"missing value{'s' if len(missing) > 1 else ''} for "
                 f"{', '.join(repr(m) for m in missing)}; "
-                f"pass --at {' '.join(f'{m}=<number>' for m in missing)}"
+                + hint.format(assignments=assignments)
             )
 
     env = {name: Value(float(v), label=name) for name, v in point.items()}

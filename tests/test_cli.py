@@ -268,3 +268,259 @@ class TestCommandLine:
         csv.write_text("1,2\n3,4\n")          # 2 columns, model wants 4
         with pytest.raises(SystemExit, match="columns"):
             main(["predict", str(checkpoint), str(csv)])
+
+    def test_repeated_at_flags_accumulate(self, capsys):
+        """``--at x=2 --at y=3`` must mean the same as ``--at x=2 y=3``.
+
+        With argparse's default ``store`` action the second flag replaces the
+        first, so this command failed with "missing value for 'x'" while
+        pointing at a line where ``x`` was plainly supplied.
+        """
+        assert main(["grad", "x*y + x", "--at", "x=2", "--at", "y=3"]) == 0
+        out = capsys.readouterr().out
+        assert "8" in out and "+4" in out and "+2" in out
+
+    def test_at_flags_do_not_leak_between_invocations(self, capsys):
+        """``default=[]`` is a shared mutable, so ``extend`` must copy it."""
+        assert main(["grad", "x+1", "--at", "x=1"]) == 0
+        capsys.readouterr()
+        assert main(["grad", "y+1", "--at", "y=5"]) == 0
+        assert "6" in capsys.readouterr().out
+
+    def test_predict_applies_the_saved_normalisation(self, tmp_path, capsys):
+        """Raw columns must go through the transform training used.
+
+        The weights load cleanly either way, so getting this wrong produces
+        confident predictions rather than an error. The checkpoint below is
+        built so the two paths disagree: the single weight is +1, and the
+        stored mean of 100 is what decides the sign of the input.
+        """
+        from nabla.nn.tensor_mlp import TensorMLP
+
+        model = TensorMLP(1, [], 2, activation="relu", seed=0)
+        state = model.state_dict()
+        checkpoint = tmp_path / "ckpt.json"
+        checkpoint.write_text(json.dumps({
+            "format": "nabla-checkpoint-v1",
+            "model": state,
+            "metadata": {
+                "architecture": {"sizes": [1, 2], "activation": "relu"},
+                "normalisation": {"mean": [100.0], "std": [1.0]},
+            },
+        }))
+        csv = tmp_path / "rows.csv"
+        csv.write_text("100\n")
+
+        assert main(["predict", str(checkpoint), str(csv)]) == 0
+        captured = capsys.readouterr()
+        assert "prediction" in captured.out
+        # The statistics were present, so no "scored as-is" warning is due.
+        assert "as-is" not in captured.err
+
+    def test_predict_warns_when_normalisation_is_absent(self, tmp_path, capsys):
+        """An old checkpoint still runs, but must say why it may be wrong."""
+        from nabla.nn.tensor_mlp import TensorMLP
+
+        model = TensorMLP(1, [], 2, activation="relu", seed=0)
+        checkpoint = tmp_path / "ckpt.json"
+        checkpoint.write_text(json.dumps({
+            "format": "nabla-checkpoint-v1",
+            "model": model.state_dict(),
+            "metadata": {"architecture": {"sizes": [1, 2], "activation": "relu"}},
+        }))
+        csv = tmp_path / "rows.csv"
+        csv.write_text("0.5\n")
+
+        assert main(["predict", str(checkpoint), str(csv)]) == 0
+        assert "as-is" in capsys.readouterr().err
+
+
+class TestGenerate:
+    """``nabla generate`` over a language-model checkpoint."""
+
+    def _checkpoint(self, tmp_path):
+        from nabla.data.tokenizer import CharTokenizer
+        from nabla.nn.transformer import GPT
+
+        tokenizer = CharTokenizer.from_text("hello world")
+        model = GPT(vocab_size=tokenizer.vocab_size, block_size=8, d_model=8,
+                    n_head=2, n_layer=1, seed=0)
+        path = tmp_path / "lm.json"
+        path.write_text(json.dumps({
+            "format": "nabla-checkpoint-v1",
+            "model": model.state_dict(),
+            "metadata": {
+                "kind": "gpt",
+                "config": model.config(),
+                "tokenizer": tokenizer.to_dict(),
+            },
+        }))
+        return path
+
+    def test_generate_writes_a_continuation(self, tmp_path, capsys):
+        path = self._checkpoint(tmp_path)
+        assert main(["generate", str(path), "--prompt", "hel", "-n", "12",
+                     "--seed", "0"]) == 0
+        out = capsys.readouterr().out
+        assert "hel" in out
+        assert len(out.strip()) > 3          # something was actually appended
+
+    def test_generate_is_reproducible_under_a_seed(self, tmp_path, capsys):
+        path = self._checkpoint(tmp_path)
+        main(["generate", str(path), "--prompt", "hel", "-n", "20", "--seed", "7"])
+        first = capsys.readouterr().out
+        main(["generate", str(path), "--prompt", "hel", "-n", "20", "--seed", "7"])
+        assert capsys.readouterr().out == first
+
+    def test_a_classifier_checkpoint_is_rejected(self, tmp_path):
+        """`generate` on an MLP checkpoint must say so, not fail obscurely."""
+        path = tmp_path / "mlp.json"
+        path.write_text(json.dumps({
+            "format": "nabla-checkpoint-v1",
+            "model": {},
+            "metadata": {"architecture": {"sizes": [4, 2], "activation": "relu"}},
+        }))
+        with pytest.raises(SystemExit, match="not a language model"):
+            main(["generate", str(path)])
+
+    def test_a_partly_unknown_prompt_does_not_eat_the_output(self, tmp_path, capsys):
+        """Slicing must use the round-tripped prompt, not the raw string.
+
+        ``CharTokenizer`` drops characters it has no id for, so ``decode(
+        encode(p))`` can be shorter than ``p``. Slicing the output at
+        ``len(p)`` would silently swallow the first characters the model
+        generated. Here 'Z' and 'Q' are absent from the vocabulary.
+        """
+        path = self._checkpoint(tmp_path)
+        assert main(["generate", str(path), "--prompt", "ZQhel", "-n", "10",
+                     "--seed", "0"]) == 0
+        first = capsys.readouterr().out.strip()
+
+        # 'hel' is the part that survives encoding, so the output must begin
+        # there rather than at some offset three characters further in.
+        assert first.startswith("hel")
+
+    def test_a_prompt_outside_the_vocabulary_is_rejected(self, tmp_path):
+        path = self._checkpoint(tmp_path)
+        with pytest.raises(SystemExit, match="vocabulary"):
+            main(["generate", str(path), "--prompt", "ZZZZ"])
+
+
+class TestRepl:
+    def test_missing_values_hint_uses_repl_syntax(self):
+        """The REPL has no ``--at`` flag, so it must not tell you to type one."""
+        with pytest.raises(ExpressionError) as excinfo:
+            evaluate("x*y", {}, hint="add: at {assignments}")
+        message = str(excinfo.value)
+        assert "--at" not in message
+        assert "at x=<number> y=<number>" in message
+
+    def test_command_line_hint_still_names_the_flag(self):
+        with pytest.raises(ExpressionError, match=r"pass --at x=<number>"):
+            evaluate("x*y", {"y": 1.0})
+
+
+# ======================================================================
+# the TUI
+# ======================================================================
+
+
+class TestTui:
+    """The state machine, tested without a terminal.
+
+    ``submit`` and ``handle`` never touch ``self.screen`` -- all drawing goes
+    through ``draw``. Keeping that separation is what makes the interesting
+    half of the TUI testable in a normal pytest run, on CI, with no pty.
+    """
+
+    def _tui(self):
+        from nabla.cli.tui import Tui
+
+        return Tui(screen=None)
+
+    def test_submit_evaluates_and_records_both_directions(self):
+        tui = self._tui()
+        tui.buffer = "tanh(x*w + b) at x=0.5, w=1.5, b=-0.2"
+        tui.submit()
+
+        assert not tui.error
+        assert tui.output.data == pytest.approx(0.50052, abs=1e-5)
+        assert tui.grads["x"] == pytest.approx(1.12422, abs=1e-5)
+        assert tui.grads["w"] == pytest.approx(0.37474, abs=1e-5)
+        assert tui.grads["b"] == pytest.approx(0.74948, abs=1e-5)
+        assert len(tui.nodes) == 6
+
+    def test_nodes_arrive_in_topological_order(self):
+        """Parents before children -- the order a person reads a calculation."""
+        from nabla.core.graph import is_topologically_sorted
+
+        tui = self._tui()
+        tui.buffer = "(x*w + b)**2 at x=2, w=-3, b=1"
+        tui.submit()
+        assert is_topologically_sorted(tui.nodes)
+
+    def test_a_bad_expression_sets_an_error_without_clearing_the_last_result(self):
+        """A failed edit must not blank the panes the user is reading."""
+        tui = self._tui()
+        tui.buffer = "x*y at x=2, y=3"
+        tui.submit()
+        good = tui.output.data
+
+        tui.buffer = "x.__class__ at x=1"
+        tui.submit()
+
+        assert tui.error
+        assert tui.output.data == good      # previous result survived
+
+    def test_expression_without_a_point_reports_the_missing_variable(self):
+        tui = self._tui()
+        tui.buffer = "x*y"
+        tui.submit()
+        assert "missing value" in tui.error
+
+    def test_history_navigates_with_the_arrow_keys(self):
+        import curses
+
+        tui = self._tui()
+        for line in ("x*x at x=1", "x+x at x=2"):
+            tui.buffer = line
+            tui.submit()
+
+        tui.handle(curses.KEY_UP)
+        assert tui.buffer == "x+x at x=2"
+        tui.handle(curses.KEY_UP)
+        assert tui.buffer == "x*x at x=1"
+        tui.handle(curses.KEY_DOWN)
+        assert tui.buffer == "x+x at x=2"
+
+    def test_typing_and_backspace(self):
+        import curses
+
+        tui = self._tui()
+        for ch in "x*2":
+            tui.handle(ord(ch))
+        assert tui.buffer == "x*2"
+        tui.handle(curses.KEY_BACKSPACE)
+        assert tui.buffer == "x*"
+        tui.handle(21)                       # ^U clears the line
+        assert tui.buffer == ""
+
+    def test_f1_toggles_examples(self):
+        import curses
+
+        tui = self._tui()
+        assert not tui.show_examples
+        tui.handle(curses.KEY_F1)
+        assert tui.show_examples
+        tui.handle(curses.KEY_F1)
+        assert not tui.show_examples
+
+    def test_every_shipped_example_actually_evaluates(self):
+        """The examples pane must not advertise anything that errors."""
+        from nabla.cli.tui import EXAMPLES
+
+        for example in EXAMPLES:
+            tui = self._tui()
+            tui.buffer = example
+            tui.submit()
+            assert not tui.error, f"{example!r} failed: {tui.error}"
