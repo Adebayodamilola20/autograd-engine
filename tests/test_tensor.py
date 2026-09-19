@@ -388,6 +388,69 @@ class TestSoftmaxFamily:
         )
 
 
+class TestNumericalGuards:
+    """The tensor engine must fail as loudly as the scalar one.
+
+    ``Value.exp`` documents the rule: raise rather than return ``inf`` and
+    poison the graph with ``nan``. The tensor engine used to return ``inf``
+    for the identical expression, so the same mistake was an error on one
+    engine and a silent wrong answer on the other. ``log`` always guarded its
+    domain; these close the matching holes in ``exp`` and division.
+
+    The reason to raise rather than clamp is that an ``inf`` does not stay
+    where it was produced. It reaches the backward pass, ``inf * 0.0`` is
+    ``nan``, and every parameter upstream is poisoned while training carries
+    on printing numbers.
+    """
+
+    def test_exp_overflow_raises_instead_of_returning_inf(self):
+        with pytest.raises(OverflowError, match="overflows float64"):
+            Tensor([1000.0]).exp()
+
+    def test_exp_overflow_names_the_offending_value(self):
+        with pytest.raises(OverflowError, match="800"):
+            Tensor([[1.0, 800.0], [2.0, 3.0]]).exp()
+
+    def test_exp_still_allows_the_largest_safe_input(self):
+        assert np.isfinite(Tensor([709.0]).exp().data).all()
+
+    def test_exp_of_an_empty_tensor_is_not_an_error(self):
+        """``np.max`` of an empty array raises, so the size check comes first."""
+        assert Tensor(np.array([])).exp().data.size == 0
+
+    def test_division_by_zero_raises(self):
+        with pytest.raises(ZeroDivisionError, match="division by zero"):
+            Tensor([1.0, 2.0]) / Tensor([1.0, 0.0])
+
+    def test_negative_power_of_zero_raises(self):
+        with pytest.raises(ZeroDivisionError):
+            Tensor([2.0, 0.0]) ** -1.0
+
+    def test_the_error_counts_the_offending_elements(self):
+        with pytest.raises(ZeroDivisionError, match="2 of 4"):
+            Tensor([0.0, 1.0, 0.0, 2.0]) ** -1
+
+    def test_zero_to_a_positive_power_is_still_fine(self):
+        assert (Tensor([3.0, 0.0]) ** 2).data.tolist() == [9.0, 0.0]
+        assert (Tensor([4.0, 0.0]) ** 0.5).data.tolist() == [2.0, 0.0]
+
+    def test_ordinary_division_is_unaffected(self):
+        assert (Tensor([6.0]) / Tensor([2.0])).data.tolist() == [3.0]
+
+    def test_softmax_of_huge_logits_still_works(self):
+        """The guard must not break the one legitimate heavy user of exp.
+
+        ``log_softmax`` subtracts the row maximum first, so what reaches
+        ``exp`` is always at most 0. If this ever fails, the guard is wrong,
+        not the workload.
+        """
+        p = Tensor([1000.0, 1000.0, 0.0]).softmax().data
+        assert np.all(np.isfinite(p))
+        assert p.sum() == pytest.approx(1.0)
+        assert Tensor([[1e4, 1e4 - 1.0]]).log_softmax().data[0].tolist() == \
+            pytest.approx([-0.31326168751822286, -1.3132616875182228])
+
+
 # ======================================================================
 # backward mechanics
 # ======================================================================

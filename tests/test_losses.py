@@ -301,6 +301,95 @@ class TestBatchCrossEntropy:
             softmax_cross_entropy([], [])
 
 
+class TestLabelRangeIsChecked:
+    """A negative class label must not be accepted as an index.
+
+    ``out[rows, targets] = 1.0`` raises for a label at or above ``n_classes``,
+    but a negative label is a perfectly legal NumPy index counting from the
+    end, so ``-1`` silently one-hotted the last class. The guard was
+    asymmetric: too high was caught, too low was not.
+
+    It matters because ``-1`` is the conventional sentinel for "unlabelled"
+    or "ignore this row", so the most natural way to mark a row as having no
+    label was also the way to silently train it against the final class.
+    """
+
+    def _logits(self):
+        import numpy as np
+
+        from nabla.core.tensor import Tensor
+
+        # Strongly predicts class 2, so a wrapped -1 looks like a perfect
+        # prediction and the bug produces a *flattering* number.
+        return Tensor(np.array([[0.0, 0.0, 9.0]]))
+
+    def test_cross_entropy_rejects_a_negative_label(self):
+        from nabla.losses.tensor_losses import tensor_cross_entropy
+
+        with pytest.raises(ValueError, match=r"-1 is outside \[0, 2\]"):
+            tensor_cross_entropy(self._logits(), [-1])
+
+    def test_the_message_explains_the_sentinel_trap(self):
+        from nabla.losses.tensor_losses import one_hot_array
+
+        with pytest.raises(ValueError, match="not an 'ignore' sentinel"):
+            one_hot_array([-1], 3)
+
+    def test_accuracy_rejects_a_negative_label(self):
+        """Loss and accuracy must not disagree about the same batch.
+
+        Before the fix, ``-1`` gave a near-zero loss (one-hot wrapped to
+        class 2, which the model predicted) *and* zero accuracy (``argmax``
+        returns 2, which is not -1). Two metrics contradicting each other is
+        far harder to debug than one clear error.
+        """
+        from nabla.losses.tensor_losses import tensor_accuracy
+
+        with pytest.raises(ValueError, match=r"-1 is outside"):
+            tensor_accuracy(self._logits(), [-1])
+
+    def test_both_one_hot_helpers_agree(self):
+        from nabla.data.dataset import one_hot
+        from nabla.losses.tensor_losses import one_hot_array
+
+        for helper in (one_hot, one_hot_array):
+            with pytest.raises(ValueError, match="outside"):
+                helper([-1], 3)
+
+    def test_a_too_large_label_is_still_rejected(self):
+        from nabla.losses.tensor_losses import one_hot_array
+
+        with pytest.raises(ValueError, match=r"5 is outside \[0, 2\]"):
+            one_hot_array([5], 3)
+
+    def test_accuracy_rejects_a_target_count_mismatch(self):
+        from nabla.losses.tensor_losses import tensor_accuracy
+
+        with pytest.raises(ValueError, match="1 rows of logits but 2 targets"):
+            tensor_accuracy(self._logits(), [0, 1])
+
+    def test_valid_labels_are_untouched(self):
+        from nabla.data.dataset import one_hot
+        from nabla.losses.tensor_losses import (
+            one_hot_array,
+            tensor_accuracy,
+            tensor_cross_entropy,
+        )
+
+        assert one_hot_array([0, 2], 3).tolist() == [[1, 0, 0], [0, 0, 1]]
+        assert one_hot([0, 2], 3).tolist() == [[1, 0, 0], [0, 0, 1]]
+        assert tensor_accuracy(self._logits(), [2]) == 1.0
+        assert tensor_cross_entropy(self._logits(), [2]).item() == pytest.approx(
+            0.000247, abs=1e-5
+        )
+
+    def test_an_empty_batch_is_not_an_error(self):
+        """``min``/``max`` of an empty array raise, so size is checked first."""
+        from nabla.losses.tensor_losses import one_hot_array
+
+        assert one_hot_array([], 3).shape == (0, 3)
+
+
 class TestBinaryCrossEntropy:
     @pytest.mark.parametrize("z, y", [(1.3, 1.0), (-2.1, 0.0), (0.0, 1.0), (0.0, 0.0)])
     def test_gradient_is_sigmoid_minus_target(self, z, y):

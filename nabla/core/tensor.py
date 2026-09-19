@@ -291,6 +291,18 @@ class Tensor:
                 "Tensor ** Tensor is not implemented; use (b * a.log()).exp()"
             )
         n = float(exponent)
+        # A negative exponent is a division, and `0 ** -1` is `inf`, not an
+        # error, in NumPy. Since `a / b` is built as `a * b ** -1.0`, letting
+        # that through means division by zero silently produces `inf` and then
+        # `nan` gradients, while the scalar engine raises ZeroDivisionError for
+        # the identical expression. `log` already guards its own domain here;
+        # this closes the matching hole.
+        if n < 0.0 and self.data.size and np.any(self.data == 0.0):
+            raise ZeroDivisionError(
+                f"zero to the power {n:g}: division by zero in "
+                f"{int(np.count_nonzero(self.data == 0.0))} of "
+                f"{self.data.size} elements"
+            )
         out = Tensor(self.data**n, (self,), f"**{n:g}")
 
         def _backward() -> None:
@@ -541,7 +553,30 @@ class Tensor:
     # ==================================================================
 
     def exp(self) -> "Tensor":
-        r""":math:`e^{x}`, elementwise. Derivative is the output."""
+        r""":math:`e^{x}`, elementwise. Derivative is the output.
+
+        Numerics
+        --------
+        Overflows above ~709.78 in double precision. We raise rather than
+        return ``inf``, for the same reason ``Value.exp`` does: an ``inf``
+        here does not stay here. It reaches the backward pass, where
+        ``inf * 0.0`` is ``nan``, and from there it spreads to every parameter
+        upstream. The run continues, the loss prints as ``nan``, and the cause
+        is many operations behind the symptom.
+
+        ``log_softmax`` subtracts the row maximum before exponentiating, so
+        every real workload in this repository stays inside the safe range by
+        construction. Hitting this error means a genuinely unstable
+        formulation, not an unlucky input.
+        """
+        # `np.max` of an empty array raises, and an empty exp is trivially
+        # in range, so the size check comes first.
+        if self.data.size and np.max(self.data) > 709.78:
+            offender = float(np.max(self.data))
+            raise OverflowError(
+                f"exp({offender:g}) overflows float64 (limit ~709.78). "
+                "Use a numerically stable formulation -- see nabla/losses/."
+            )
         out = Tensor(np.exp(self.data), (self,), "exp")
 
         def _backward() -> None:

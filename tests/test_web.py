@@ -242,6 +242,37 @@ class TestEndpoints:
         assert 0 <= body["prediction"] <= 9
         assert sum(body["probabilities"]) == pytest.approx(1.0)
 
+    def test_an_oversized_body_gets_the_error_not_a_reset(self, server):
+        """Refusing a body without reading it resets the connection.
+
+        The size cap itself always worked: nothing was over-allocated. But
+        the server replied and closed while the client was still sending, so
+        the kernel answered the incoming data with RST and the client saw a
+        connection reset instead of "request body too large". The 400 existed
+        and never arrived.
+
+        Sent over a raw socket, because urllib reports the reset as a
+        transport error and the status line is the thing under test.
+        """
+        host, port = server.removeprefix("http://").split(":")
+        payload = json.dumps({"pixels": [0.5] * 100_000}).encode()
+        assert len(payload) > 256 * 1024, "payload must exceed MAX_BODY"
+
+        with socket.create_connection((host, int(port)), timeout=15) as sock:
+            sock.sendall(
+                b"POST /api/predict HTTP/1.1\r\nHost: t\r\n"
+                b"Content-Type: application/json\r\n"
+                + f"Content-Length: {len(payload)}\r\n".encode()
+                + b"Connection: close\r\n\r\n"
+                + payload
+            )
+            data = b""
+            while chunk := sock.recv(8192):
+                data += chunk
+
+        assert int(data.split(b" ")[1]) == 400
+        assert b"too large" in data
+
     @pytest.mark.parametrize(
         "payload",
         [

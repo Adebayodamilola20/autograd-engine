@@ -266,7 +266,69 @@ class Handler(BaseHTTPRequestHandler):
         self._send(code, json.dumps(payload).encode("utf-8"), "application/json")
 
     def _error(self, code: int, message: str) -> None:
+        self._drain_request_body()
         self._json(code, {"error": message})
+
+    # How much unread request body to swallow before giving up on a tidy
+    # reply. Bounded, because draining is work the client asked us to do, and
+    # an unbounded drain is the denial of service the size cap exists to
+    # prevent. Memory is not at risk either way (the bytes are read in chunks
+    # and discarded); time is.
+    #
+    # It has to be comfortably larger than MAX_BODY to be worth anything. Set
+    # equal to it, the server drains exactly up to the limit and leaves the
+    # entire overage unread, which resets the connection anyway and makes the
+    # drain pure waste. 8 MB covers any plausible accidental oversend, which
+    # is the case that deserves a real error message. A client deliberately
+    # sending more than that is abusive, and a reset is the right answer.
+    DRAIN_LIMIT = 8 * 1024 * 1024
+
+    def _drain_request_body(self) -> None:
+        """Consume the request body we are about to refuse to read.
+
+        Rejecting an oversized POST without reading it leaves the client
+        still sending. The server writes its 400 and closes, the kernel sees
+        data arriving for a closed socket, and answers with RST. The client
+        never gets the response: instead of "request body too large" it sees
+        a connection reset, which says nothing about what went wrong.
+
+        So the body has to be consumed before replying, even though it is
+        being discarded. This is a general HTTP server obligation rather than
+        anything specific to this endpoint.
+        """
+        if getattr(self, "_body_consumed", False):
+            return
+        self._body_consumed = True
+        try:
+            remaining = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return
+
+        # Past the limit, refuse on the header alone and let the connection
+        # reset. Draining *part* of an oversized body is the worst of both:
+        # the remainder still triggers the reset, so the reply is lost anyway
+        # and the reading was wasted. Worse, `Content-Length` is chosen by the
+        # client, so a request claiming 50 MB and sending 14 bytes would block
+        # here forever. Refusing on the header is the whole point of the cap.
+        if remaining > self.DRAIN_LIMIT:
+            return
+
+        # Even within the limit the declared length may exceed what is
+        # actually sent, so a short timeout keeps a slow or lying client from
+        # holding the handler open. Being unable to drain is not fatal: the
+        # worst case is the reset we were trying to avoid.
+        previous = self.connection.gettimeout()
+        self.connection.settimeout(2.0)
+        try:
+            while remaining > 0:
+                chunk = self.rfile.read(min(remaining, 64 * 1024))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+        except (TimeoutError, OSError):
+            pass
+        finally:
+            self.connection.settimeout(previous)
 
     def _read_body(self) -> Any:
         try:
@@ -278,8 +340,12 @@ class Handler(BaseHTTPRequestHandler):
         if length > MAX_BODY:
             # Never trust a client-supplied length to size an allocation.
             raise BadRequest(f"request body too large (limit {MAX_BODY} bytes)")
+        raw = self.rfile.read(length)
+        # Read, so there is nothing left for `_error` to drain. Without this
+        # the drain would block waiting for bytes the client already sent.
+        self._body_consumed = True
         try:
-            return json.loads(self.rfile.read(length))
+            return json.loads(raw)
         except json.JSONDecodeError as err:
             raise BadRequest(f"invalid JSON: {err.msg}") from None
 

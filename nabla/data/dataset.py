@@ -262,7 +262,21 @@ def one_hot(labels: Sequence[int], n_classes: int) -> np.ndarray:
     Not needed by ``cross_entropy`` -- it takes the index directly, which is
     both faster and clearer. Provided for MSE-based comparisons and for the
     experiments that deliberately use the wrong loss to show what happens.
+
+    Labels are range-checked. NumPy raises for an index at or above
+    ``n_classes``, but a negative label is a legal index counting from the
+    end, so ``-1`` would quietly one-hot the last class rather than complain.
+    ``-1`` being the conventional "unlabelled" sentinel makes that the likely
+    way to hit it.
     """
+    labels = np.asarray(labels, dtype=int)
+    if labels.size:
+        low, high = int(labels.min()), int(labels.max())
+        if low < 0 or high >= n_classes:
+            raise ValueError(
+                f"class label {low if low < 0 else high} is outside "
+                f"[0, {n_classes - 1}]"
+            )
     out = np.zeros((len(labels), n_classes), dtype=np.float64)
-    out[np.arange(len(labels)), np.asarray(labels, dtype=int)] = 1.0
+    out[np.arange(len(labels)), labels] = 1.0
     return out
