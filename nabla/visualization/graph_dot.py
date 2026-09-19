@@ -12,13 +12,49 @@ Produces DOT text; rendering it is up to the caller::
 
 from __future__ import annotations
 
-import html
 from pathlib import Path
 from typing import Any
 
 from ..core.graph import build_edges
 
 __all__ = ["to_dot", "render_dot"]
+
+
+def _escape_quoted(text: str) -> str:
+    r"""Escape for an ordinary DOT quoted string.
+
+    Only ``\`` and ``"`` are special, and the backslash must go first or the
+    backslashes added for the quotes get escaped in turn.
+
+    Not ``html.escape``. That is a different language: it produces ``&quot;``
+    and ``&lt;``, which Graphviz has no reason to interpret and draws
+    literally, so a label reading ``a<b`` would render as ``a&lt;b``.
+    """
+    return text.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _escape_record(text: str) -> str:
+    r"""Escape for a DOT **record** label, which has extra syntax.
+
+    Inside ``shape=record`` these all mean something structural:
+
+    ======  ====================================================
+    ``|``   field separator
+    ``{}``  nest a group, flipping the layout direction
+    ``<>``  a port name, for edges that attach to one field
+    ``"``   ends the quoted string
+    ``\``   escape character
+    ======  ====================================================
+
+    Only ``|`` was escaped before, so a label containing a quote closed the
+    string early and produced a file Graphviz refuses to parse, while braces
+    and angle brackets silently restructured the box. Labels come from
+    ``Value.label``, which is user-supplied, so none of these are exotic.
+    """
+    out = text.replace("\\", "\\\\")
+    for char in '"|{}<>':
+        out = out.replace(char, "\\" + char)
+    return out
 
 
 def _fmt(x: float) -> str:
@@ -42,7 +78,11 @@ def to_dot(root: Any, *, title: str = "", show_grad: bool = True) -> str:
 
     lines = ["digraph computational_graph {", "  rankdir=LR;"]
     if title:
-        lines += [f'  label="{html.escape(title)}";', "  labelloc=t;", "  fontsize=16;"]
+        lines += [
+            f'  label="{_escape_quoted(title)}";',
+            "  labelloc=t;",
+            "  fontsize=16;",
+        ]
     lines += [
         '  node [fontname="monospace", fontsize=10];',
         '  edge [color="#888888"];',
@@ -53,7 +93,7 @@ def to_dot(root: Any, *, title: str = "", show_grad: bool = True) -> str:
         fields = [name, f"data {_fmt(node.data)}"]
         if show_grad:
             fields.append(f"grad {_fmt(node.grad)}")
-        record = " | ".join(f.replace("|", "\\|") for f in fields)
+        record = " | ".join(_escape_record(f) for f in fields)
         fill = "#eef4ff" if not node._prev else ("#fff3e0" if node is root else "#ffffff")
         lines.append(
             f'  {uid[id(node)]} [shape=record, style=filled, fillcolor="{fill}", '
@@ -64,7 +104,7 @@ def to_dot(root: Any, *, title: str = "", show_grad: bool = True) -> str:
             op_id = f"{uid[id(node)]}op"
             lines.append(
                 f'  {op_id} [shape=ellipse, style=filled, fillcolor="#f3f4f8", '
-                f'label="{html.escape(node._op)}"];'
+                f'label="{_escape_quoted(node._op)}"];'
             )
             lines.append(f"  {op_id} -> {uid[id(node)]};")
 
