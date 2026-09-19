@@ -28,6 +28,15 @@ class RunningAverage:
         self.count = 0
 
     def update(self, value: float, weight: int = 1) -> None:
+        """Add ``value``, counted ``weight`` times (normally the batch size).
+
+        A negative weight is rejected because it produces a believable number
+        from nonsense: ``update(9.0, -2)`` leaves ``total=-18, count=-2``, and
+        the two signs cancel to give exactly ``9.0``. Nothing downstream could
+        tell that apart from a real mean.
+        """
+        if weight < 0:
+            raise ValueError(f"weight must be non-negative, got {weight}")
         self.total += float(value) * weight
         self.count += weight
 
@@ -82,7 +91,13 @@ def argmax(values: Sequence[float]) -> int:
     The prediction rule for a classifier. Note softmax is **monotonic**, so
     ``argmax(logits) == argmax(softmax(logits))`` -- you never need to compute
     probabilities just to make a prediction, only to report confidence.
+
+    An empty sequence has no largest element, so it raises. Returning the
+    initial ``0`` instead would be indistinguishable from confidently
+    predicting class 0, which is the wrong answer dressed as a real one.
     """
+    if not len(values):
+        raise ValueError("argmax() of an empty sequence")
     best = 0
     for i in range(1, len(values)):
         if values[i] > values[best]:
@@ -97,7 +112,17 @@ def accuracy(predictions: Sequence[int], targets: Sequence[int]) -> float:
     and it is misleading on imbalanced data (99% accuracy is trivial when 99%
     of samples share a label). Cross-entropy sees what accuracy cannot, which
     is why we train on one and report both.
+
+    Lengths must match. ``zip`` stops at the shorter sequence, so handing this
+    3 predictions and 2 targets used to score only the first two and divide by
+    2, reporting a clean 100% while a third prediction was never looked at.
+    A dropped batch or an off-by-one in the evaluation loop would show up as
+    an improbably good number rather than as an error.
     """
+    if len(predictions) != len(targets):
+        raise ValueError(
+            f"{len(predictions)} predictions but {len(targets)} targets"
+        )
     if not targets:
         return 0.0
     correct = sum(1 for p, t in zip(predictions, targets) if int(p) == int(t))
@@ -107,10 +132,29 @@ def accuracy(predictions: Sequence[int], targets: Sequence[int]) -> float:
 def confusion_counts(
     predictions: Sequence[int], targets: Sequence[int], n_classes: int
 ) -> list[list[int]]:
-    """``matrix[true][predicted]`` counts. Diagonal = correct."""
+    """``matrix[true][predicted]`` counts. Diagonal = correct.
+
+    Both inputs are validated, for the two reasons ``accuracy`` is: ``zip``
+    silently truncates to the shorter sequence, and a negative label is a
+    legal Python index. ``matrix[-1][0] += 1`` counts into the last row
+    without complaint, so a ``-1`` "unlabelled" sentinel would quietly
+    inflate the final class rather than raise. A label at or above
+    ``n_classes`` already raised IndexError; this makes both directions
+    behave the same way.
+    """
+    if len(predictions) != len(targets):
+        raise ValueError(
+            f"{len(predictions)} predictions but {len(targets)} targets"
+        )
     matrix = [[0] * n_classes for _ in range(n_classes)]
     for p, t in zip(predictions, targets):
-        matrix[int(t)][int(p)] += 1
+        p, t = int(p), int(t)
+        for name, label in (("prediction", p), ("target", t)):
+            if not 0 <= label < n_classes:
+                raise ValueError(
+                    f"{name} {label} is outside [0, {n_classes - 1}]"
+                )
+        matrix[t][p] += 1
     return matrix
 
 
