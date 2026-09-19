@@ -46,8 +46,29 @@ def one_hot_array(targets: Sequence[int], n_classes: int) -> np.ndarray:
 
     A *constant*, not a parameter: it carries no gradient because the labels
     are given, not learned.
+
+    Labels are range-checked, which NumPy will not do for you in one
+    direction. ``out[rows, targets] = 1.0`` raises for a label of ``n_classes``
+    or above, but a **negative** label is a valid NumPy index that counts from
+    the end, so ``-1`` silently one-hots the last class. That matters more
+    than it sounds: ``-1`` is the usual sentinel for "unlabelled" or "ignore",
+    so the natural way to mark a row as having no label quietly trains it
+    against the final class instead.
     """
     targets = np.asarray(targets, dtype=int)
+    if targets.size:
+        low, high = int(targets.min()), int(targets.max())
+        if low < 0 or high >= n_classes:
+            offender = low if low < 0 else high
+            raise ValueError(
+                f"class label {offender} is outside [0, {n_classes - 1}]"
+                + (
+                    "; negative labels are not an 'ignore' sentinel here, they "
+                    "would silently one-hot a class counting from the end"
+                    if low < 0
+                    else ""
+                )
+            )
     out = np.zeros((len(targets), n_classes), dtype=np.float64)
     out[np.arange(len(targets)), targets] = 1.0
     return out
@@ -103,6 +124,27 @@ def tensor_mse(predictions: Tensor, targets: np.ndarray | Tensor) -> Tensor:
 
 
 def tensor_accuracy(logits: Tensor, targets: Sequence[int]) -> float:
-    """Fraction correct, as a plain float. Not differentiable, and not meant to be."""
+    """Fraction correct, as a plain float. Not differentiable, and not meant to be.
+
+    Range-checked for the same reason as ``one_hot_array``, and to keep the
+    two agreeing. Without it a label of ``-1`` reports a near-zero loss (the
+    one-hot wrapped around to the last class, which the model predicted) and
+    simultaneously zero accuracy (``argmax`` returns ``2``, which does not
+    equal ``-1``). Two metrics contradicting each other on the same batch is a
+    much harder thing to debug than one clear error.
+    """
+    targets = np.asarray(targets, dtype=int)
     predicted = np.asarray(logits.data).argmax(axis=-1)
-    return float(np.mean(predicted == np.asarray(targets, dtype=int)))
+    if predicted.shape != targets.shape:
+        raise ValueError(
+            f"{predicted.shape[0]} rows of logits but {targets.shape[0]} targets"
+        )
+    if targets.size:
+        n_classes = logits.shape[-1]
+        low, high = int(targets.min()), int(targets.max())
+        if low < 0 or high >= n_classes:
+            raise ValueError(
+                f"class label {low if low < 0 else high} is outside "
+                f"[0, {n_classes - 1}]"
+            )
+    return float(np.mean(predicted == targets))
