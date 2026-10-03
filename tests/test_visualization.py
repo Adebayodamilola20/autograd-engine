@@ -182,3 +182,112 @@ class TestDot:
         plain = next(b for b in bodies if b.startswith("{x |"))
         assert "\\" not in plain
         assert plain.startswith("{x | data 2 | grad ")
+
+
+# ======================================================================
+# the package's lazy matplotlib loading
+# ======================================================================
+
+
+class TestLazyImport:
+    """``nabla/visualization/__init__.py`` defers matplotlib until needed.
+
+    The mechanism was completely broken: every lazy access raised
+    RecursionError. It survived because the rest of the repository imports
+    the fully-qualified ``nabla.visualization.plots``, which bypasses the
+    package ``__getattr__`` entirely, so nothing exercised the shorter form
+    that ``__getattr__`` exists to support.
+
+    The cause is worth knowing, because the broken line looks correct.
+    ``from . import plots`` compiles to ``_handle_fromlist``, whose first act
+    is ``hasattr(package, "plots")``. A package defining ``__getattr__``
+    answers that by calling it, so the lookup re-enters ``__getattr__``, which
+    runs ``from . import plots`` again. ``import_module`` addresses the
+    submodule directly and never consults the parent's attributes.
+    """
+
+    def test_the_submodule_is_reachable_by_attribute(self):
+        import nabla.visualization as viz
+
+        assert viz.plots.__name__ == "nabla.visualization.plots"
+
+    def test_from_import_of_the_submodule_works(self):
+        from nabla.visualization import plots
+
+        assert plots.__name__ == "nabla.visualization.plots"
+
+    def test_a_plot_helper_is_reachable_through_the_package(self):
+        from nabla.visualization import plot_confusion_matrix
+
+        assert plot_confusion_matrix.__name__ == "plot_confusion_matrix"
+
+    def test_a_missing_name_raises_attribute_error_not_recursion(self):
+        """``hasattr`` must answer False rather than blowing the stack."""
+        import nabla.visualization as viz
+
+        assert hasattr(viz, "definitely_not_a_real_name") is False
+        with pytest.raises(AttributeError, match="has no attribute"):
+            _ = viz.definitely_not_a_real_name
+
+    def test_dunder_lookups_do_not_drag_in_matplotlib(self):
+        """Introspection must not import an optional extra as a side effect."""
+        import nabla.visualization as viz
+
+        with pytest.raises(AttributeError):
+            _ = viz.__wrapped__
+
+    def test_the_eager_svg_exports_still_work(self):
+        """The whole point: the dependency-free renderers stay dependency-free."""
+        from nabla.visualization import graph_to_svg, to_dot
+
+        assert graph_to_svg(Value(1.0) * 2.0).lstrip().startswith("<svg")
+        assert to_dot(Value(1.0) * 2.0).startswith("digraph")
+
+
+class TestConfusionMatrixPlot:
+    """The plot must validate exactly as the printed matrix does.
+
+    It used to tally its own matrix with ``cm[int(t), int(p)] += 1``, carrying
+    the two bugs ``training.metrics.confusion_counts`` had already fixed: a
+    length mismatch silently drew a picture from part of the data, and a
+    negative label counted into the last row. It now calls that function, so
+    the picture and the numbers cannot disagree.
+    """
+
+    def _plot(self, *args, **kwargs):
+        pytest.importorskip("matplotlib")
+        from nabla.visualization.plots import plot_confusion_matrix
+
+        return plot_confusion_matrix(*args, **kwargs)
+
+    def test_rows_are_true_and_columns_are_predicted(self):
+        """Orientation, pinned: reusing a shared helper could transpose it."""
+        import numpy as np
+
+        figure = self._plot([0], [1], n_classes=2)
+        matrix = np.asarray(figure.axes[0].images[0].get_array())
+        assert matrix[0, 1] == 1.0, "true 0 / predicted 1 belongs at [0][1]"
+        assert matrix[1, 0] == 0.0
+
+    def test_mismatched_lengths_raise(self):
+        with pytest.raises(ValueError, match="predictions but"):
+            self._plot([0, 1, 1], [0, 1], n_classes=2)
+
+    def test_a_negative_label_raises(self):
+        with pytest.raises(ValueError, match="outside"):
+            self._plot([0, -1], [0, 1], n_classes=2)
+
+    def test_a_label_above_the_range_raises(self):
+        with pytest.raises(ValueError, match="outside"):
+            self._plot([0, 5], [0, 1], n_classes=2)
+
+    def test_an_empty_matrix_is_allowed(self):
+        assert self._plot([], [], n_classes=2) is not None
+
+    def test_normalize_survives_an_empty_row(self):
+        """Dividing by a zero row sum must not produce NaN in the image."""
+        import numpy as np
+
+        figure = self._plot([0], [0], n_classes=3, normalize=True)
+        matrix = np.asarray(figure.axes[0].images[0].get_array())
+        assert np.all(np.isfinite(matrix))
