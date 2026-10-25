@@ -13,47 +13,35 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: requirements.lock
-
-      - name: Install (pinned)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.lock
-          pip install -e . --no-deps
-
-      - name: Run the suite
-        run: python -m pytest --cov=nabla --cov-report=term-missing
+          enable-cache: true
+      - name: Install exactly what uv.lock pins
+        run: uv sync --locked --extra dev --extra viz
+      - name: Run the suite (fails under 80% coverage)
+        run: uv run pytest --cov=nabla --cov-report=term-missing
 
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install ruff
-      - run: ruff check .
+      - uses: astral-sh/setup-uv@v6
+      - run: uvx ruff check .
 
   lockfile:
-    # requirements.lock must match pyproject.toml; regenerate it with the
-    # command in the README after changing dependencies.
+    # uv.lock must match pyproject.toml, and requirements.txt must match uv.lock
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
-      - name: Regenerate and compare
+      - run: uv lock --check
+      - name: requirements.txt is the pinned export of uv.lock
         run: |
-          uv pip compile pyproject.toml --extra dev --extra viz --universal --python-version 3.10 -o requirements.lock
-          git diff --exit-code requirements.lock
+          uv export --frozen --extra dev --extra viz --no-hashes --no-emit-project -o requirements.txt
+          git diff --exit-code requirements.txt
 
   audit:
     # known vulnerabilities in any pinned dependency fail the build
@@ -63,13 +51,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install (pinned)
-        run: |
+      - run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.lock
-          pip install -e . --no-deps
-      - run: pip install pip-audit
-      - run: pip-audit --skip-editable
+          pip install -r requirements.txt pip-audit
+          pip-audit -r requirements.txt
 
   docker:
     # the Dockerfile (also used by the devcontainer) builds and its suite passes

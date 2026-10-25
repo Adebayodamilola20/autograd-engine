@@ -9,12 +9,12 @@ clear** (someone learning from the code can follow it).
 ```bash
 git clone https://github.com/Adebayodamilola20/autograd-engine.git && cd autograd-engine
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.lock && pip install -e . --no-deps
+pip install -r requirements.txt && pip install -e . --no-deps   # or: uv sync --extra dev --extra viz
 python -m pytest            # everything should pass before you start
 ```
 
 Or open the repo in a devcontainer / build the `Dockerfile`; both use the same
-pinned `requirements.lock`.
+pinned dependencies (`uv.lock` / `requirements.txt`).
 
 ## Making a change
 
@@ -26,21 +26,22 @@ pinned `requirements.lock`.
    (`nabla.core.gradcheck`). This is the project's core guarantee.
 3. **Keep coverage up.** CI runs `pytest --cov=nabla` and fails under 80%.
 4. **Lint:** `ruff check .` must pass.
-5. **Dependencies:** change them in `pyproject.toml`, then regenerate the lock:
+5. **Dependencies:** change them in `pyproject.toml`, then regenerate the locks:
 
    ```bash
-   uv pip compile pyproject.toml --extra dev --extra viz --universal --python-version 3.10 -o requirements.lock
+   uv lock
+   uv export --frozen --extra dev --extra viz --no-hashes --no-emit-project -o requirements.txt
    ```
 
-   CI fails if `requirements.lock` is out of date.
+   CI fails if `uv.lock` or `requirements.txt` is out of date.
 6. **Results:** if a change affects a headline number, rerun it from its config
    (`--config configs/...`) and update the README and `runs/reference/`.
 
 ## Pull requests
 
 Describe *why* as well as what, link any issue, and note anything you measured.
-All CI jobs (tests on 3.10–3.13, coverage gate, lint, lockfile, audit, Docker
-build) must be green.
+All CI jobs (tests on 3.10–3.13, coverage gate, lint, lockfile, audit, the
+MNIST experiment check, Docker build) must be green.
 
 ## Reporting bugs
 
