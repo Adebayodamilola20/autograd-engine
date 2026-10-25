@@ -25,12 +25,14 @@ failure here is a real failure rather than a subprocess quirk.
 from __future__ import annotations
 
 import argparse
+import os
 import runpy
 import sys
 from pathlib import Path
 from typing import Sequence
 
 from .. import __version__
+from ..log import configure
 from .expr import FUNCTIONS, ExpressionError, build, evaluate, parse_assignments
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -409,6 +411,11 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("-V", "--version", action="version", version=f"nabla {__version__}")
+    noise = parser.add_mutually_exclusive_group()
+    noise.add_argument("-q", "--quiet", action="store_true", help="only warnings and errors from training")
+    noise.add_argument("-v", "--verbose", action="store_true", help="include debug messages")
+    parser.add_argument("--log-format", choices=["plain", "json"], default=None,
+                        help="training progress as plain text (default) or JSON lines")
     subparsers = parser.add_subparsers(dest="command", metavar="<command>")
 
     p = subparsers.add_parser("grad", help="differentiate an expression at a point")
@@ -511,6 +518,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not getattr(args, "command", None):
         print(BANNER)
         return 0
+
+    # Settings travel by environment so the example scripts the CLI runs as
+    # subprocesses pick them up too.
+    if args.quiet or args.verbose:
+        os.environ["NABLA_LOG_LEVEL"] = "WARNING" if args.quiet else "DEBUG"
+    if args.log_format:
+        os.environ["NABLA_LOG_FORMAT"] = args.log_format
+    configure()
 
     try:
         return int(args.func(args) or 0)

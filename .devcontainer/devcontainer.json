@@ -1,0 +1,11 @@
+{
+  "name": "nabla",
+  "build": { "dockerfile": "../Dockerfile", "context": ".." },
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "charliermarsh.ruff"]
+    }
+  },
+  "postCreateCommand": "pip install ruff && python -m pytest -q",
+  "remoteUser": "root"
+}

@@ -4,6 +4,7 @@ Run:
     python examples/train_mnist.py                     # full 784→128→64→10
     python examples/train_mnist.py --epochs 30
     python examples/train_mnist.py --engine scalar     # the Value engine (slow!)
+    python examples/train_mnist.py --config configs/mnist.json   # the README result
     python examples/train_mnist.py --help
 
 No PyTorch. No TensorFlow. Every gradient in this script comes from
@@ -31,6 +32,7 @@ from nabla.nn import MLP  # noqa: E402
 from nabla.nn.tensor_mlp import TensorMLP  # noqa: E402
 from nabla.optim import SGD, Adam  # noqa: E402
 from nabla.training import Trainer, confusion_counts  # noqa: E402
+from nabla.training.runs import load_config, write_run_record  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACTS = ROOT / "artifacts"
@@ -61,6 +63,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--grad-clip", type=float, default=None)
     p.add_argument("--no-plots", action="store_true")
+    p.add_argument("--config", type=Path, default=None,
+                   help="JSON file of settings (keys = option names, e.g. batch_size); "
+                        "flags given on the command line still win")
+    # A config file supplies the defaults; explicit flags override it.
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--config", type=Path, default=None)
+    known, _ = pre.parse_known_args()
+    if known.config is not None:
+        allowed = {a.dest for a in p._actions} - {"help", "config"}
+        p.set_defaults(**load_config(known.config, allowed=allowed))
     return p.parse_args()
 
 
@@ -212,6 +224,13 @@ def main() -> int:
     }
     (ARTIFACTS / "mnist_results.json").write_text(json.dumps(summary, indent=2))
     print("    artifacts/mnist_results.json")
+    run_config = {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()}
+    record = write_run_record("mnist", run_config, {
+        "test_accuracy": test_acc, "test_loss": test_loss, "best_val_accuracy": best_val,
+        "epochs_run": len(history["train_loss"]), "parameters": model.num_parameters(),
+        "training_seconds": round(total_seconds, 2),
+    }, out_dir=ROOT / "runs")
+    print(f"    {record.relative_to(ROOT)}   (config, git commit and result, for reproducing it)")
     print("    artifacts/mnist_checkpoints/best.json")
 
     if not args.no_plots:

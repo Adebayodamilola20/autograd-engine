@@ -1,0 +1,14 @@
+# Weekly PRs that bump pinned dependencies and GitHub Actions versions.
+# Each PR runs the full CI (tests, coverage gate, audit), so an update only
+# lands if everything still passes.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

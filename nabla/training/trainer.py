@@ -39,8 +39,11 @@ import numpy as np
 
 from ..core.value import Value
 from ..data.dataset import DataLoader
+from ..log import ensure_configured, get_logger
 from .checkpoint import save_checkpoint
 from .metrics import EpochMetrics, RunningAverage, Timer, argmax
+
+_logger = get_logger("training")
 
 __all__ = ["Trainer", "TrainingHistory"]
 
@@ -124,8 +127,11 @@ class Trainer:
     verbose
         Print one line per epoch.
     log_fn
-        Where those lines go. Defaults to ``print``; the experiment scripts
-        redirect it.
+        Where those lines go. By default they go to the ``nabla.training``
+        logger (see ``nabla.log``): plain text on stdout unless configured
+        otherwise, or one JSON object per epoch with every metric as a field
+        when ``NABLA_LOG_FORMAT=json``. Pass a function to redirect them, as
+        the experiment scripts do.
 
     Examples
     --------
@@ -146,7 +152,7 @@ class Trainer:
         grad_clip: float | None = None,
         engine: str = "auto",
         verbose: bool = True,
-        log_fn: Callable[[str], None] = print,
+        log_fn: Callable[[str], None] | None = None,
     ) -> None:
         self.model = model
         self.engine = _resolve_engine(engine, model)
@@ -155,8 +161,19 @@ class Trainer:
         self.metric = metric
         self.grad_clip = grad_clip
         self.verbose = verbose
-        self.log = log_fn
+        self.log = log_fn if log_fn is not None else self._log_info
         self.history = TrainingHistory()
+
+    def _log_info(self, message: str, fields: dict[str, Any] | None = None) -> None:
+        ensure_configured()
+        _logger.info(message, extra={"fields": fields or {}})
+
+    def _report(self, message: str, fields: dict[str, Any] | None = None) -> None:
+        """Send a progress line, with structured fields when using the logger."""
+        if self.log == self._log_info:
+            self._log_info(message, fields)
+        else:
+            self.log(message)
 
     # ------------------------------------------------------------------
     # engine abstraction
@@ -316,7 +333,7 @@ class Trainer:
         since_improvement = 0
 
         if self.verbose:
-            self.log(
+            self._report(
                 f"training {self.model} for {epochs} epochs on "
                 f"{len(train_loader.dataset):,} samples "
                 f"({len(train_loader)} batches of {train_loader.batch_size})"
@@ -347,7 +364,7 @@ class Trainer:
             self.history.record(metrics)
 
             if self.verbose:
-                self.log(metrics.format_line(epochs))
+                self._report(metrics.format_line(epochs), {"event": "epoch", **metrics.to_dict()})
             for callback in callbacks:
                 callback(metrics)
 
@@ -389,7 +406,7 @@ class Trainer:
                 and since_improvement >= early_stopping_patience
             ):
                 if self.verbose:
-                    self.log(
+                    self._report(
                         f"early stopping: no {checkpoint_metric} improvement for "
                         f"{since_improvement} epochs (best {best_score:.4f} "
                         f"at epoch {best_epoch})"
@@ -397,7 +414,8 @@ class Trainer:
                 break
 
         if self.verbose and best_epoch > 0:
-            self.log(f"best {checkpoint_metric}: {best_score:.4f} at epoch {best_epoch}")
+            self._report(f"best {checkpoint_metric}: {best_score:.4f} at epoch {best_epoch}",
+                         {"event": "best", "metric": checkpoint_metric, "score": best_score, "epoch": best_epoch})
         return self.history
 
     # ------------------------------------------------------------------

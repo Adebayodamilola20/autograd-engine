@@ -84,7 +84,7 @@ python examples/gradient_check.py        # every rule vs finite differences
 python examples/train_xor.py             # the smallest real network
 python examples/train_mnist.py           # 97.63%, ~16 s
 
-python -m pytest                         # 737 tests
+python -m pytest                         # 999 tests
 python benchmarks/compare.py             # vs PyTorch
 python experiments/run_all.py            # the Phase 22 sweeps
 python web/server.py                     # the interactive demo
