@@ -388,6 +388,22 @@ uv pip compile pyproject.toml --extra dev --extra viz --universal --python-versi
 
 CI fails if the lockfile is out of date.
 
+### Reproducing the results
+
+The headline numbers come from config files, and every training run writes a
+record of exactly what ran:
+
+```bash
+python examples/train_mnist.py --config configs/mnist.json                      # 97.63%
+python examples/train_language_model.py --config configs/tinyshakespeare.json   # needs data/raw/tinyshakespeare.txt
+```
+
+Each run saves `runs/<name>_<timestamp>.json` with the full config, its hash,
+the git commit, Python/NumPy versions and the final metrics.
+[`runs/reference/mnist.json`](runs/reference/mnist.json) is the record of the
+97.63% run; same config hash plus same commit means the same experiment.
+Command-line flags still override anything in a config.
+
 ### Everything you can run
 
 ```bash

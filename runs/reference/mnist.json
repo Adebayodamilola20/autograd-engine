@@ -1,0 +1,37 @@
+{
+  "name": "mnist",
+  "timestamp": "2026-10-25T18:19:42+00:00",
+  "config": {
+    "engine": "tensor",
+    "hidden": [
+      128,
+      64
+    ],
+    "activation": "relu",
+    "optimizer": "adam",
+    "lr": 0.001,
+    "momentum": 0.9,
+    "epochs": 20,
+    "batch_size": 64,
+    "n_train": null,
+    "n_test": null,
+    "val_fraction": 0.1,
+    "seed": 0,
+    "grad_clip": null,
+    "no_plots": true,
+    "config": "configs/mnist.json"
+  },
+  "config_hash": "1da68541bd81",
+  "git_commit": "24c9613",
+  "python": "3.15.0",
+  "numpy": "2.5.4",
+  "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "results": {
+    "test_accuracy": 0.9763,
+    "test_loss": 0.10271725504179076,
+    "best_val_accuracy": 0.9759959993332222,
+    "epochs_run": 14,
+    "parameters": 109386,
+    "training_seconds": 20.43
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "text": "data/raw/tinyshakespeare.txt",
+  "tokenizer": "char",
+  "block_size": 64,
+  "d_model": 128,
+  "n_head": 4,
+  "n_layer": 4,
+  "batch_size": 16,
+  "steps": 4000,
+  "lr": 0.001,
+  "seed": 0,
+  "prompt": "QUEEN:\n"
+}

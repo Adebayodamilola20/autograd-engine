@@ -46,6 +46,7 @@ from nabla.losses.tensor_losses import tensor_cross_entropy  # noqa: E402
 from nabla.nn.transformer import GPT  # noqa: E402
 from nabla.optim import AdamW  # noqa: E402
 from nabla.training.checkpoint import save_checkpoint  # noqa: E402
+from nabla.training.runs import load_config, write_run_record  # noqa: E402
 
 CORPUS = """All the world's a stage, and all the men and women merely players.
 They have their exits and their entrances, and one man in his time plays many
@@ -114,7 +115,17 @@ def main() -> int:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--save", type=Path, help="write the trained model here")
     p.add_argument("--prompt", default="The ", help="seed text for the sample")
+    p.add_argument("--config", type=Path, default=None,
+                   help="JSON file of settings (keys = option names); flags still win")
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--config", type=Path, default=None)
+    known, _ = pre.parse_known_args()
+    if known.config is not None:
+        allowed = {a.dest for a in p._actions} - {"help", "config"}
+        p.set_defaults(**load_config(known.config, allowed=allowed))
     args = p.parse_args()
+    if isinstance(args.text, str):
+        args.text = Path(args.text)
 
     rng = np.random.default_rng(args.seed)
 
@@ -229,6 +240,14 @@ def main() -> int:
     else:
         print("    The model beats chance and is generating structured text.")
         print("    More text and more --steps is what improves it from here.")
+
+    run_config = {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()}
+    record = write_run_record("language_model", run_config, {
+        "starting_loss": first_loss, "final_val_loss": final_val,
+        "perplexity": float(np.exp(final_val)), "parameters": model.num_parameters(),
+        "training_seconds": round(elapsed, 2),
+    }, out_dir=Path(__file__).resolve().parents[1] / "runs")
+    print(f"\n    run recorded in {record.name}")
 
     if args.save:
         path = save_checkpoint(

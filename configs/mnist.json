@@ -1,0 +1,12 @@
+{
+  "engine": "tensor",
+  "hidden": [128, 64],
+  "activation": "relu",
+  "optimizer": "adam",
+  "lr": 0.001,
+  "momentum": 0.9,
+  "epochs": 20,
+  "batch_size": 64,
+  "val_fraction": 0.1,
+  "seed": 0
+}

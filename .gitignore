@@ -21,3 +21,7 @@ data/raw/
 web/node_modules/
 web/dist/
 web/.vite/
+
+# run records (keep the committed reference ones)
+runs/*
+!runs/reference/
