@@ -56,6 +56,25 @@ jobs:
           pip install -r requirements.txt pip-audit
           pip-audit -r requirements.txt
 
+  experiment:
+    # the config-driven MNIST run, end to end: download, train, record, check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --locked --extra dev --extra viz
+      - name: Train from configs/mnist_ci.json
+        run: uv run python examples/train_mnist.py --config configs/mnist_ci.json --no-plots
+      - name: The recorded run must reach 94% test accuracy
+        run: uv run python -m nabla.training.runs check runs --name mnist --metric test_accuracy --min 0.94
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mnist-run-record
+          path: runs/mnist_*.json
+
   docker:
     # the Dockerfile (also used by the devcontainer) builds and its suite passes
     runs-on: ubuntu-latest
