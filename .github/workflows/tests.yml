@@ -70,3 +70,11 @@ jobs:
           pip install -e . --no-deps
       - run: pip install pip-audit
       - run: pip-audit --skip-editable
+
+  docker:
+    # the Dockerfile (also used by the devcontainer) builds and its suite passes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t nabla .
+      - run: docker run --rm nabla
