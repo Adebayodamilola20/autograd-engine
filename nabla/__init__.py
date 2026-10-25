@@ -30,7 +30,7 @@ from .core.graph import (
 )
 from .core.value import Value
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "Value",

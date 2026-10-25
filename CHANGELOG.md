@@ -6,6 +6,15 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-26
+
+### Changed
+- Dependencies are locked with `uv.lock` (the standard uv lockfile); CI installs with `uv sync --locked`, and `requirements.txt` is now the fully pinned export of it. Replaces `requirements.lock`.
+
+### Added
+- CI `experiment` job: trains MNIST from `configs/mnist_ci.json`, writes the run record, fails below 94% test accuracy, and uploads the record as an artifact.
+- `python -m nabla.training.runs check` to hold a run record to a threshold.
+
 ## [0.2.0] - 2026-10-25
 
 ### Added
@@ -25,6 +34,7 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - MNIST training to 97.63% test accuracy; a GPT-style transformer trained on tinyshakespeare; spiking and energy-based networks.
 - `nabla` CLI, graph renderers, plotting, web demo, benchmarks against PyTorch, experiment sweeps and 21 chapters of documentation.
 
-[Unreleased]: https://github.com/Adebayodamilola20/autograd-engine/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Adebayodamilola20/autograd-engine/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Adebayodamilola20/autograd-engine/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Adebayodamilola20/autograd-engine/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Adebayodamilola20/autograd-engine/releases/tag/v0.1.0

@@ -7,7 +7,14 @@ from datetime import datetime, timezone
 
 import pytest
 
-from nabla.training.runs import config_hash, load_config, write_run_record
+from nabla.training.runs import (
+    check_record,
+    config_hash,
+    latest_record,
+    load_config,
+    main,
+    write_run_record,
+)
 
 
 def test_load_config_reads_json(tmp_path):
@@ -54,3 +61,41 @@ def test_run_record_contains_everything_needed_to_repeat_it(tmp_path):
     assert record["timestamp"] == "2026-10-25T12:00:00+00:00"
     for key in ("python", "numpy", "platform", "git_commit"):
         assert key in record
+
+
+def _two_runs(tmp_path):
+    out = tmp_path / "runs"
+    write_run_record("mnist", {"seed": 0}, {"test_accuracy": 0.90}, out_dir=out,
+                     now=datetime(2026, 10, 1, tzinfo=timezone.utc))
+    write_run_record("mnist", {"seed": 0}, {"test_accuracy": 0.97}, out_dir=out,
+                     now=datetime(2026, 10, 2, tzinfo=timezone.utc))
+    write_run_record("gpt", {"seed": 0}, {"perplexity": 5.5}, out_dir=out,
+                     now=datetime(2026, 10, 3, tzinfo=timezone.utc))
+    return out
+
+
+def test_latest_record_picks_the_newest_of_that_name(tmp_path):
+    out = _two_runs(tmp_path)
+    assert latest_record(out, "mnist")["results"]["test_accuracy"] == 0.97
+    with pytest.raises(FileNotFoundError):
+        latest_record(out, "snake")
+
+
+def test_check_record_bounds():
+    record = {"name": "mnist", "config_hash": "abc", "results": {"test_accuracy": 0.96}}
+    assert "OK" in check_record(record, "test_accuracy", minimum=0.95)
+    with pytest.raises(ValueError, match="below"):
+        check_record(record, "test_accuracy", minimum=0.97)
+    with pytest.raises(ValueError, match="above"):
+        check_record(record, "test_accuracy", maximum=0.9)
+    with pytest.raises(ValueError, match="no result named"):
+        check_record(record, "loss")
+
+
+def test_check_command_exit_codes(tmp_path, capsys):
+    out = str(_two_runs(tmp_path))
+    assert main(["check", out, "--name", "mnist", "--metric", "test_accuracy", "--min", "0.95"]) == 0
+    assert "OK" in capsys.readouterr().out
+    assert main(["check", out, "--name", "mnist", "--metric", "test_accuracy", "--min", "0.99"]) == 1
+    assert "below" in capsys.readouterr().err
+    assert main(["check", out, "--name", "gpt", "--metric", "perplexity", "--max", "6"]) == 0

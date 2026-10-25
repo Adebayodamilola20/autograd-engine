@@ -13,6 +13,10 @@ module makes that mechanical:
 Two records with the same ``config_hash`` and ``git_commit`` were the same
 experiment; if their metrics differ, something is not deterministic.
 
+CI uses the command-line check to hold a result to a threshold:
+
+    python -m nabla.training.runs check runs --name mnist --metric test_accuracy --min 0.95
+
     >>> cfg = {"seed": 0, "lr": 0.001}
     >>> config_hash(cfg) == config_hash({"lr": 0.001, "seed": 0})
     True
@@ -27,11 +31,11 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
-__all__ = ["load_config", "config_hash", "write_run_record"]
+__all__ = ["load_config", "config_hash", "write_run_record", "latest_record", "check_record"]
 
 
 def load_config(path: str | Path, allowed: Iterable[str] | None = None) -> dict[str, Any]:
@@ -95,3 +99,49 @@ def write_run_record(
     path = out / f"{name}_{now.strftime('%Y%m%dT%H%M%SZ')}.json"
     path.write_text(json.dumps(record, indent=2, default=str), encoding="utf-8")
     return path
+
+
+def latest_record(out_dir: str | Path, name: str) -> dict[str, Any]:
+    """The most recent ``<name>_*.json`` record in ``out_dir``."""
+    records = sorted(Path(out_dir).glob(f"{name}_*.json"))
+    if not records:
+        raise FileNotFoundError(f"no {name}_*.json run records in {out_dir}")
+    return json.loads(records[-1].read_text(encoding="utf-8"))
+
+
+def check_record(record: Mapping[str, Any], metric: str,
+                 minimum: float | None = None, maximum: float | None = None) -> str:
+    """Raise ``ValueError`` if ``record['results'][metric]`` is outside the bounds."""
+    results = record.get("results", {})
+    if metric not in results:
+        raise ValueError(f"run has no result named {metric!r} (has: {', '.join(results)})")
+    value = float(results[metric])
+    if minimum is not None and value < minimum:
+        raise ValueError(f"{metric} = {value:.4f}, below the required {minimum}")
+    if maximum is not None and value > maximum:
+        raise ValueError(f"{metric} = {value:.4f}, above the allowed {maximum}")
+    return f"{record.get('name')}: {metric} = {value:.4f} (config {record.get('config_hash')}) OK"
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="python -m nabla.training.runs")
+    sub = parser.add_subparsers(dest="command", required=True)
+    c = sub.add_parser("check", help="hold the latest run record to a threshold")
+    c.add_argument("out_dir")
+    c.add_argument("--name", required=True)
+    c.add_argument("--metric", required=True)
+    c.add_argument("--min", type=float, default=None, dest="minimum")
+    c.add_argument("--max", type=float, default=None, dest="maximum")
+    args = parser.parse_args(argv)
+    try:
+        print(check_record(latest_record(args.out_dir, args.name), args.metric, args.minimum, args.maximum))
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"check failed: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
