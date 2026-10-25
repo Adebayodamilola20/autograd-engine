@@ -65,7 +65,7 @@ between "here is an image" and "here is a trained classifier".
 | Architecture | 784 → 128 → 64 → 10, ReLU |
 | Parameters | 109,386 |
 | Training time | 16.3 s, 14 epochs |
-| Tests | 737, including 183 finite-difference gradient checks |
+| Tests | 999, including 183 finite-difference gradient checks |
 | Reproducible | seed 0, identical result every run |
 
 <div align="center">
@@ -368,13 +368,25 @@ vary by over 15 percentage points across seeds.
 ```bash
 git clone https://github.com/Adebayodamilola20/autograd-engine.git && cd autograd-engine
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt          # numpy, matplotlib
+pip install -r requirements.lock        # exact, pinned versions (what CI installs)
+pip install -e . --no-deps               # nabla itself, editable
 
+python -m pytest                         # the full suite, should be all green
 python examples/train_mnist.py           # downloads MNIST, trains, ~16 s
 ```
 
 Python 3.10+. The engine itself needs only NumPy; matplotlib is for plots and
 PyTorch is needed *only* for the benchmark comparison (`pip install -e ".[bench]"`).
+
+`requirements.lock` pins every package, including transitive ones, for Python
+3.10 to 3.13 on every platform, so a fresh clone installs exactly what CI tests.
+It is generated from `pyproject.toml`; after changing dependencies there, run
+
+```bash
+uv pip compile pyproject.toml --extra dev --extra viz --universal --python-version 3.10 -o requirements.lock
+```
+
+CI fails if the lockfile is out of date.
 
 ### Everything you can run
 
@@ -386,7 +398,7 @@ python examples/train_xor.py              # the smallest real network
 python examples/train_mnist.py            # 97.63%
 python examples/train_language_model.py   # a GPT that writes text
 
-python -m pytest                          # 737 tests
+python -m pytest                          # 999 tests
 python benchmarks/compare.py              # vs PyTorch, regenerates docs/18
 python benchmarks/profile_training.py     # where the time goes
 python experiments/run_all.py             # the five sweeps
@@ -406,7 +418,7 @@ nabla/
   training/    trainer  metrics  checkpoint
   visualization/  graph_svg  graph_dot  plots
 
-tests/         737 tests across 12 files
+tests/         999 tests across 21 files
 examples/      runnable, narrated demonstrations
 benchmarks/    vs PyTorch, and the profiler
 experiments/   the Phase 22 sweeps
