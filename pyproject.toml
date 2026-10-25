@@ -60,3 +60,14 @@ ignore = [
 "experiments/*" = ["E402"]
 "web/*" = ["E402"]
 "tests/*" = ["B011"]  # assert False is fine in tests
+
+[tool.coverage.run]
+source = ["nabla"]
+branch = false
+
+[tool.coverage.report]
+# CI runs `pytest --cov=nabla`; this makes the run fail if coverage drops
+# below the line, so it can't regress silently. Currently ~86%.
+fail_under = 80
+show_missing = true
+skip_covered = true
