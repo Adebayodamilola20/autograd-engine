@@ -507,7 +507,7 @@ class GPT(Module):
             step = np.asarray(logits.data[0, len(window) - 1], dtype=np.float64)
 
             if temperature <= 0:
-                ids.append(int(step.argmax()))
+                ids.append(int(np.argmax(step)))
                 continue
 
             step = step / temperature
@@ -517,7 +517,7 @@ class GPT(Module):
 
             # Softmax with the max subtracted: exp of a large logit overflows,
             # and the shift cancels exactly in the ratio.
-            step = np.exp(step - step.max())
+            step = np.exp(step - np.max(step))
             ids.append(int(rng.choice(step.size, p=step / step.sum())))
 
         return ids

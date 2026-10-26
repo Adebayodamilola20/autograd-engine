@@ -16,7 +16,7 @@ nabla = "nabla.cli.main:main"
 
 [project.optional-dependencies]
 viz = ["matplotlib>=3.7"]
-dev = ["pytest>=7.4", "pytest-cov>=4.1"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1", "mypy>=1.10"]
 bench = ["torch>=2.0"]
 
 [tool.setuptools.packages.find]
@@ -71,3 +71,11 @@ branch = false
 fail_under = 80
 show_missing = true
 skip_covered = true
+
+[tool.mypy]
+# Checked in CI. The package is type-clean; keep it that way.
+files = ["nabla"]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true

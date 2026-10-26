@@ -31,6 +31,17 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - run: uvx ruff check .
 
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --locked --extra dev --extra viz
+      - run: uv run mypy
+
   lockfile:
     # uv.lock must match pyproject.toml, and requirements.txt must match uv.lock
     runs-on: ubuntu-latest

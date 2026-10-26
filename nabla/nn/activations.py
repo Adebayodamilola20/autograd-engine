@@ -194,7 +194,7 @@ class _Activation(Module):
 
     fn: Callable[[Value], Value]
 
-    def forward(self, x):  # type: ignore[override]
+    def forward(self, x):
         if isinstance(x, (list, tuple)):
             return [type(self).fn(v) for v in x]
         return type(self).fn(x)
@@ -230,7 +230,7 @@ class LeakyReLU(Module):
         super().__init__()
         self.slope = slope
 
-    def forward(self, x):  # type: ignore[override]
+    def forward(self, x):
         if isinstance(x, (list, tuple)):
             return [leaky_relu(v, self.slope) for v in x]
         return leaky_relu(x, self.slope)
