@@ -44,7 +44,9 @@ class Dataset:
     Parameters
     ----------
     x
-        Shape ``(n_samples, n_features)``.
+        Shape ``(n_samples, n_features)``, or ``(n_samples, *sample_shape)``
+        for samples that keep their structure, e.g. ``(n, 28, 28)`` images
+        from ``load_mnist(flatten=False)``.
     y
         Shape ``(n_samples,)`` -- class indices for classification, or targets
         of shape ``(n_samples, n_outputs)`` for regression.
@@ -57,8 +59,10 @@ class Dataset:
         y = np.asarray(y)
         if len(x) != len(y):
             raise ValueError(f"x has {len(x)} rows but y has {len(y)}")
-        if x.ndim != 2:
-            raise ValueError(f"x must be 2-D (n_samples, n_features), got {x.shape}")
+        if x.ndim < 2:
+            raise ValueError(
+                f"x must be at least 2-D (n_samples, n_features, ...), got {x.shape}"
+            )
 
         self.x = x
         self.y = y
@@ -76,7 +80,8 @@ class Dataset:
 
     @property
     def n_features(self) -> int:
-        return int(self.x.shape[1])
+        """Numbers per sample once flattened (784 for a 28x28 image)."""
+        return int(np.prod(self.x.shape[1:]))
 
     @property
     def n_classes(self) -> int:
