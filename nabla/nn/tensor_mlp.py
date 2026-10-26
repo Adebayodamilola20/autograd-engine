@@ -219,13 +219,12 @@ class TensorMLP(Module):
         not cheap. Prefer ``DataLoader(..., as_arrays=True)``, which skips the
         list round trip entirely (Phase 19).
         """
-        if not isinstance(x, Tensor):
-            x = Tensor(x)
-        if x.ndim == 1:
-            x = x.reshape(1, -1)
+        h = x if isinstance(x, Tensor) else Tensor(x)
+        if h.ndim == 1:
+            h = h.reshape(1, -1)
         for layer in self.layers:
-            x = layer(x)
-        return x
+            h = layer(h)
+        return h
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         """Class indices for a batch of inputs."""

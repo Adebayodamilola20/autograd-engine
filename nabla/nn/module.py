@@ -41,6 +41,12 @@ class Module:
     and implement ``forward()``.
     """
 
+    # Created in __init__ through object.__setattr__ (declared here so type
+    # checkers know they exist).
+    _params: dict[str, Any]
+    _modules: dict[str, Module]
+    training: bool
+
     def __init__(self) -> None:
         # object.__setattr__ bypasses our own hook, which would otherwise
         # recurse while these very dicts are being created.
@@ -213,7 +219,8 @@ class Module:
         loading a partially-initialised model -- the failure mode where a
         checkpoint appears to load but half the weights are still random.
         """
-        current = dict(self.named_parameters())
+        # Any: a parameter holds a float (scalar engine) or an array (tensor engine)
+        current: dict[str, Any] = dict(self.named_parameters())
         if strict:
             missing = set(current) - set(state)
             unexpected = set(state) - set(current)

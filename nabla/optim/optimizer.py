@@ -62,7 +62,9 @@ class Optimizer:
     """
 
     def __init__(self, params: Iterable[Parameter], lr: float) -> None:
-        self.params: list[Parameter] = list(params)
+        # Parameter (scalar engine) or TensorParameter (tensor engine): .data is a
+        # float for one and an array for the other, and every optimiser handles both.
+        self.params: list[Any] = list(params)
         if not self.params:
             raise ValueError(
                 "optimizer got an empty parameter list -- did you pass "
