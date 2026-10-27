@@ -14,7 +14,7 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
@@ -27,14 +27,14 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
       - run: uvx ruff check .
 
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
@@ -46,7 +46,7 @@ jobs:
     # uv.lock must match pyproject.toml, and requirements.txt must match uv.lock
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
       - run: uv lock --check
       - name: requirements.txt is the pinned export of uv.lock
@@ -58,7 +58,7 @@ jobs:
     # known vulnerabilities in any pinned dependency fail the build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -71,7 +71,7 @@ jobs:
     # the config-driven MNIST run, end to end: download, train, record, check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.12"
@@ -90,6 +90,6 @@ jobs:
     # the Dockerfile (also used by the devcontainer) builds and its suite passes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: docker build -t nabla .
       - run: docker run --rm nabla
