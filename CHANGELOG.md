@@ -6,6 +6,14 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `mypy` type-check job in CI; the package is type-clean (42 errors fixed).
+- `RMSprop` optimiser, and learning-rate schedules (`nabla.optim.schedules`: constant, step decay, exponential, cosine, warmup) for `Trainer.fit(lr_schedule=...)`.
+- Offline tests for the MNIST loader (IDX parsing, caching, subsets).
+
+### Fixed
+- `Dataset` accepts image-shaped samples, so `load_mnist(flatten=False)` works.
+
 ## [0.2.1] - 2026-10-26
 
 ### Changed
