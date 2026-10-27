@@ -126,7 +126,8 @@ class SGD(Optimizer):
 
         # One velocity buffer per parameter, indexed positionally so it stays
         # aligned with self.params and serialises cleanly.
-        self.velocity: list[float] = [0.0] * len(self.params)
+        # a float per scalar parameter, an array per tensor parameter
+        self.velocity: list[float | np.ndarray] = [0.0] * len(self.params)
 
     def step(self) -> None:
         """Apply one update to every parameter.

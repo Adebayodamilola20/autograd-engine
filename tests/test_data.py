@@ -49,6 +49,13 @@ class TestDataset:
         with pytest.raises(ValueError, match="2-D"):
             Dataset(np.zeros(10), np.zeros(10))
 
+    def test_image_shaped_samples_are_kept(self):
+        # load_mnist(flatten=False) produces exactly this
+        images = Dataset(np.zeros((4, 28, 28)), np.arange(4))
+        assert images.x.shape == (4, 28, 28)
+        assert images.n_features == 784
+        assert len(images.subset(2, seed=0)) == 2
+
     def test_getitem_returns_plain_python(self, data):
         """The scalar engine wants floats and ints, not NumPy scalars."""
         xs, y = data[0]

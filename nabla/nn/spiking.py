@@ -436,6 +436,7 @@ class SpikingMLP(Module):
         # Mean rather than sum over time, so the logit scale does not depend on
         # `timesteps`. Without this, changing T silently rescales the loss and
         # the effective learning rate along with it.
+        assert accumulated is not None  # timesteps >= 1 is checked in __init__
         logits = accumulated * (1.0 / self.timesteps)
 
         if not collect_stats:

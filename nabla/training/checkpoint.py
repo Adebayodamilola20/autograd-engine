@@ -92,7 +92,8 @@ def save_npz(path: str | Path, arrays: dict[str, np.ndarray]) -> Path:
     """Compressed binary save, for when size matters (e.g. the web demo)."""
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(p, **arrays)
+    # numpy's stubs type **kwds as the allow_pickle flag; named arrays are the documented use
+    np.savez_compressed(p, **arrays)  # type: ignore[arg-type]
     return p
 
 

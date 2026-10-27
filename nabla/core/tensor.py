@@ -417,7 +417,8 @@ class Tensor:
         Reduction and broadcast are adjoint operations.
         """
         out = Tensor(
-            self.data.sum(axis=axis, keepdims=keepdims), (self,), "sum"
+            # numpy's stubs only accept a Literal for keepdims
+            self.data.sum(axis=axis, keepdims=keepdims), (self,), "sum"  # type: ignore[call-overload]
         )
         in_shape = self.shape
 
@@ -467,7 +468,7 @@ class Tensor:
         and we split the gradient evenly among the tied elements -- which keeps
         the total correct and is what a subgradient permits.
         """
-        result = self.data.max(axis=axis, keepdims=keepdims)
+        result = self.data.max(axis=axis, keepdims=keepdims)  # type: ignore[call-overload]
         out = Tensor(result, (self,), "max")
         in_shape = self.shape
 

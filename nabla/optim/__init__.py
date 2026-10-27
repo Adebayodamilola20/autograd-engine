@@ -7,6 +7,7 @@ Backpropagation says which way is uphill. These decide what to do about it.
 
 from .adam import Adam, AdamW
 from .optimizer import Optimizer
+from .rmsprop import RMSprop
 from .sgd import SGD
 
-__all__ = ["Optimizer", "SGD", "Adam", "AdamW"]
+__all__ = ["Optimizer", "SGD", "Adam", "AdamW", "RMSprop"]

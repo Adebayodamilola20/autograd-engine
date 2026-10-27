@@ -27,7 +27,7 @@ seen in, which matters more than people expect when comparing experiments.
 
 from __future__ import annotations
 
-from typing import Iterator, Sequence
+from typing import Any, Iterator, Sequence
 
 import numpy as np
 
@@ -44,7 +44,9 @@ class Dataset:
     Parameters
     ----------
     x
-        Shape ``(n_samples, n_features)``.
+        Shape ``(n_samples, n_features)``, or ``(n_samples, *sample_shape)``
+        for samples that keep their structure, e.g. ``(n, 28, 28)`` images
+        from ``load_mnist(flatten=False)``.
     y
         Shape ``(n_samples,)`` -- class indices for classification, or targets
         of shape ``(n_samples, n_outputs)`` for regression.
@@ -57,8 +59,10 @@ class Dataset:
         y = np.asarray(y)
         if len(x) != len(y):
             raise ValueError(f"x has {len(x)} rows but y has {len(y)}")
-        if x.ndim != 2:
-            raise ValueError(f"x must be 2-D (n_samples, n_features), got {x.shape}")
+        if x.ndim < 2:
+            raise ValueError(
+                f"x must be at least 2-D (n_samples, n_features, ...), got {x.shape}"
+            )
 
         self.x = x
         self.y = y
@@ -76,7 +80,8 @@ class Dataset:
 
     @property
     def n_features(self) -> int:
-        return int(self.x.shape[1])
+        """Numbers per sample once flattened (784 for a 28x28 image)."""
+        return int(np.prod(self.x.shape[1:]))
 
     @property
     def n_classes(self) -> int:
@@ -179,7 +184,7 @@ class DataLoader:
             return n // self.batch_size
         return (n + self.batch_size - 1) // self.batch_size
 
-    def __iter__(self) -> Iterator[tuple[list[list[float]], list]]:
+    def __iter__(self) -> Iterator[tuple[Any, Any]]:  # lists, or arrays with as_arrays=True
         n = len(self.dataset)
         order = self.rng.permutation(n) if self.shuffle else np.arange(n)
 
@@ -269,14 +274,14 @@ def one_hot(labels: Sequence[int], n_classes: int) -> np.ndarray:
     ``-1`` being the conventional "unlabelled" sentinel makes that the likely
     way to hit it.
     """
-    labels = np.asarray(labels, dtype=int)
-    if labels.size:
-        low, high = int(labels.min()), int(labels.max())
+    label_ids = np.asarray(labels, dtype=int)
+    if label_ids.size:
+        low, high = int(label_ids.min()), int(label_ids.max())
         if low < 0 or high >= n_classes:
             raise ValueError(
                 f"class label {low if low < 0 else high} is outside "
                 f"[0, {n_classes - 1}]"
             )
-    out = np.zeros((len(labels), n_classes), dtype=np.float64)
-    out[np.arange(len(labels)), labels] = 1.0
+    out = np.zeros((len(label_ids), n_classes), dtype=np.float64)
+    out[np.arange(len(label_ids)), label_ids] = 1.0
     return out

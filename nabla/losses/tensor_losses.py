@@ -55,9 +55,9 @@ def one_hot_array(targets: Sequence[int], n_classes: int) -> np.ndarray:
     so the natural way to mark a row as having no label quietly trains it
     against the final class instead.
     """
-    targets = np.asarray(targets, dtype=int)
-    if targets.size:
-        low, high = int(targets.min()), int(targets.max())
+    labels = np.asarray(targets, dtype=int)
+    if labels.size:
+        low, high = int(labels.min()), int(labels.max())
         if low < 0 or high >= n_classes:
             offender = low if low < 0 else high
             raise ValueError(
@@ -69,8 +69,8 @@ def one_hot_array(targets: Sequence[int], n_classes: int) -> np.ndarray:
                     else ""
                 )
             )
-    out = np.zeros((len(targets), n_classes), dtype=np.float64)
-    out[np.arange(len(targets)), targets] = 1.0
+    out = np.zeros((len(labels), n_classes), dtype=np.float64)
+    out[np.arange(len(labels)), labels] = 1.0
     return out
 
 
@@ -133,18 +133,18 @@ def tensor_accuracy(logits: Tensor, targets: Sequence[int]) -> float:
     equal ``-1``). Two metrics contradicting each other on the same batch is a
     much harder thing to debug than one clear error.
     """
-    targets = np.asarray(targets, dtype=int)
+    labels = np.asarray(targets, dtype=int)
     predicted = np.asarray(logits.data).argmax(axis=-1)
-    if predicted.shape != targets.shape:
+    if predicted.shape != labels.shape:
         raise ValueError(
-            f"{predicted.shape[0]} rows of logits but {targets.shape[0]} targets"
+            f"{predicted.shape[0]} rows of logits but {labels.shape[0]} targets"
         )
-    if targets.size:
+    if labels.size:
         n_classes = logits.shape[-1]
-        low, high = int(targets.min()), int(targets.max())
+        low, high = int(labels.min()), int(labels.max())
         if low < 0 or high >= n_classes:
             raise ValueError(
                 f"class label {low if low < 0 else high} is outside "
                 f"[0, {n_classes - 1}]"
             )
-    return float(np.mean(predicted == targets))
+    return float(np.mean(predicted == labels))

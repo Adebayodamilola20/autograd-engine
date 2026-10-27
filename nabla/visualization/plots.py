@@ -485,9 +485,9 @@ def plot_decision_boundary(
     ax.contour(gx, gy, zs, levels=[0.5], colors="#222222", linewidths=1.6)
     fig.colorbar(mesh, ax=ax, fraction=0.046, pad=0.04, label="model output")
 
-    labels = np.asarray(labels)
+    label_arr = np.asarray(labels)
     for cls, marker, colour in ((0, "o", "#2f6fd0"), (1, "s", "#c94f4f")):
-        sel = labels == cls
+        sel = label_arr == cls
         ax.scatter(
             points[sel, 0],
             points[sel, 1],

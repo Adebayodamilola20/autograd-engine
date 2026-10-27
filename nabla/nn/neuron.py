@@ -129,7 +129,7 @@ class Neuron(Module):
                 f"expected {self.n_inputs} inputs, got {len(xs)}"
             )
 
-        z = self.bias
+        z: Value = self.bias
         for w, x in zip(self.weights, xs):
             z = z + w * x
         return self.activation(z)
