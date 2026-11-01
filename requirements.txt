@@ -88,5 +88,5 @@ typing-extensions==4.16.0
     # via
     #   exceptiongroup
     #   mypy
-tzdata==2026.5
+tzdata==2026.6
     # via python-dateutil
