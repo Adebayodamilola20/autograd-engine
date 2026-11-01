@@ -69,7 +69,7 @@ pygments==2.21.0
     # via pytest
 pyparsing==3.3.3
     # via matplotlib
-pytest==9.1.1
+pytest==9.2.0
     # via
     #   nabla-autograd
     #   pytest-cov
