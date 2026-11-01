@@ -32,7 +32,7 @@ matplotlib==3.10.9 ; python_full_version < '3.11'
     # via nabla-autograd
 matplotlib==3.11.2 ; python_full_version >= '3.11'
     # via nabla-autograd
-mypy==2.4.0
+mypy==2.4.1
     # via nabla-autograd
 mypy-extensions==1.1.0
     # via mypy
