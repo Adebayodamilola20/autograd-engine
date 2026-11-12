@@ -261,7 +261,14 @@ def aggregate(results: Sequence[RunResult]) -> list[Aggregate]:
             Aggregate(
                 label=label,
                 test_acc_mean=float(np.mean(accs)),
-                test_acc_std=float(np.std(accs)),
+                # ddof=1, not NumPy's default of 0. These runs are a
+                # *sample* from the distribution of outcomes a seed can
+                # produce, and the quantity being reported is an estimate of
+                # that distribution's spread, so Bessel's correction applies.
+                # The default understates it by sqrt(n/(n-1)): 18% at three
+                # seeds, 41% at two. A single run has no spread to estimate,
+                # and ddof=1 would divide by zero, so it reports 0.0.
+                test_acc_std=float(np.std(accs, ddof=1) if len(accs) > 1 else 0.0),
                 best_val_mean=float(np.mean([r.best_val_acc for r in runs])),
                 final_loss_mean=float(
                     np.mean([r.final_train_loss for r in runs if np.isfinite(r.final_train_loss)])

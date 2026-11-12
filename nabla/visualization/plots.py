@@ -18,6 +18,8 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
+from ..training.metrics import confusion_counts
+
 try:  # matplotlib is an optional extra; the engine itself never needs it
     import matplotlib
 
@@ -277,9 +279,15 @@ def plot_confusion_matrix(
     that genuinely share strokes.
     """
     _require_mpl()
-    cm = np.zeros((n_classes, n_classes), dtype=float)
-    for t, p in zip(true_labels, predicted):
-        cm[int(t), int(p)] += 1
+    # Built by `training.metrics.confusion_counts` rather than here, so the
+    # picture and the printed matrix cannot disagree. This function used to
+    # tally its own, with two bugs that version had already fixed: `zip`
+    # truncates to the shorter sequence, so a length mismatch silently drew a
+    # matrix from part of the data, and `cm[-1, 0] += 1` is a legal index, so
+    # a negative label quietly counted into the last row.
+    cm = np.asarray(
+        confusion_counts(predicted, true_labels, n_classes), dtype=float
+    )
 
     counts = cm.copy()
     if normalize:
